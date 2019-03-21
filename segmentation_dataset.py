@@ -174,7 +174,7 @@ class SegmentationDataset(object):
         dataset = dataset.map(self.parser, num_parallel_calls=batch_size)
 
         # Potentially shuffle records.
-        if self.subset == 'train':
+        if self.is_training:
             min_queue_examples = int(
                 _DATASETS_INFORMATION[self.dataset_name].
                 subset_to_sizes[self.subset] * 0.4)
