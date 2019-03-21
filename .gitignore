@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# idea
+.idea/
+
+# dataset
+datasets/pascal_voc2012
