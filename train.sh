@@ -38,5 +38,4 @@ mkdir -p "${TRAIN_LOGDIR}"
 PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 
 python train.py --dataset_dir="${PASCAL_DATASET}"\
-  --train_logdir="${TRAIN_LOGDIR}" \
-  --train_epochs=1
+  --train_logdir="${TRAIN_LOGDIR}"

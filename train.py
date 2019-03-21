@@ -134,7 +134,6 @@ flags.DEFINE_boolean('debug', False, 'Debug or not')
 
 def main(unused_argv):
     tf.logging.set_verbosity(tf.logging.INFO)
-
     train_dataset = SegmentationDataset(
         FLAGS.dataset_name,
         FLAGS.dataset_dir,
@@ -184,7 +183,7 @@ def main(unused_argv):
         }
 
         logging_hook = tf.train.LoggingTensorHook(
-            tensors=tensors_to_log, every_n_iter=10)
+            tensors=tensors_to_log)
         train_hooks = [logging_hook]
         eval_hooks = None
 
