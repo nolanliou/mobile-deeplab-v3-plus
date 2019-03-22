@@ -4,6 +4,8 @@ import os
 import collections
 import tensorflow as tf
 
+# tf.enable_eager_execution()
+
 import matplotlib.pyplot as plt
 
 import input_preprocess
@@ -39,7 +41,7 @@ _CITYSCAPES_INFORMATION = DatasetDescriptor(
 _PASCAL_VOC_2012_INFORMATION = DatasetDescriptor(
     subset_to_sizes={
         'train': 1464,
-        'train_aug': 10582,
+        'trainaug': 10582,
         'trainval': 2913,
         'val': 1449,
     },
@@ -67,7 +69,6 @@ _DATASETS_INFORMATION = {
 
 # Default file pattern of TFRecord of TensorFlow Example.
 _FILE_PATTERN = '%s-*'
-
 
 
 class SegmentationDataset(object):
@@ -195,16 +196,32 @@ class SegmentationDataset(object):
 
         dataset = dataset.map(self.parser)
         for image, label in dataset:
+            org_image = input_preprocess.decode_org_image(image)
             image_shape = tf.shape(image)
+            org_image = tf.cast(org_image, tf.uint8)
             image = tf.cast(image, tf.uint8)
             label = tf.squeeze(label)
             print(image_shape)
             fig = plt.figure()
-            fig.add_subplot(1, 2, 1)
+            fig.add_subplot(1, 3, 1)
+            plt.imshow(org_image)
+            fig.add_subplot(1, 3, 2)
             plt.imshow(image)
-            fig.add_subplot(1, 2, 2)
+            fig.add_subplot(1, 3, 3)
+            print(tf.shape(label))
             plt.imshow(label)
             plt.show()
             break
 
+
+if __name__ == '__main__':
+    dataset = SegmentationDataset(
+        "pascal_voc2012",
+        "datasets/pascal_voc2012/tfrecord",
+        "train",
+        513,
+        513)
+
+    print('num classes:', dataset.get_num_classes())
+    dataset.show_image()
 

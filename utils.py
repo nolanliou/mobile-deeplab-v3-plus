@@ -494,6 +494,7 @@ def get_model_learning_rate(
         (1 - global_step / training_number_of_steps) ^ learning_power
 
     Args:
+      global_step: global_step.
       learning_policy: Learning rate policy for training.
       base_learning_rate: The base learning rate for model training.
       learning_rate_decay_step: Decay the base learning rate at a fixed step.

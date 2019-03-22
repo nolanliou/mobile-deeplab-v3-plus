@@ -36,7 +36,7 @@ flags.DEFINE_enum('learning_policy', 'poly', ['poly', 'step'],
 
 # Use 0.007 when training on PASCAL augmented training set, train_aug. When
 # fine-tuning on PASCAL trainval set, use learning rate=0.0001.
-flags.DEFINE_float('base_learning_rate', .0001,
+flags.DEFINE_float('base_learning_rate', .0007,
                    'The base learning rate for model training.')
 
 flags.DEFINE_float('learning_rate_decay_factor', 0.1,
@@ -152,7 +152,7 @@ def main(unused_argv):
         FLAGS.model_input_size[0],
         FLAGS.model_input_size[1],
         is_training=False)
-    run_config = tf.estimator.RunConfig(log_step_count_steps=5)
+    run_config = tf.estimator.RunConfig()
     model = tf.estimator.Estimator(
         model_fn=deeplab_v3_plus.deeplab_v3_plus_model_fn,
         model_dir=FLAGS.train_logdir,
@@ -176,29 +176,17 @@ def main(unused_argv):
     )
 
     for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
-        tensors_to_log = {
-            'learning_rate': 'learning_rate',
-            'loss': 'loss',
-            'train_pixel_accuracy': 'train_pixel_accuracy',
-            'train_mean_iou': 'train_mean_iou',
-        }
-
-        logging_hook = tf.train.LoggingTensorHook(
-            tensors=tensors_to_log, every_n_iter=10)
-        train_hooks = [logging_hook]
         eval_hooks = None
 
         if FLAGS.debug:
             debug_hook = tf_debug.LocalCLIDebugHook()
-            train_hooks.append(debug_hook)
             eval_hooks = [debug_hook]
 
         print("Start training.")
         model.train(
             input_fn=lambda: train_dataset.make_batch(FLAGS.batch_size,
-                                                      FLAGS.train_epochs),
-            hooks=train_hooks,
-            # steps=20  # For debug
+                                                      FLAGS.epochs_per_eval),
+            # steps=1 # For debug
         )
 
         print("Start evaluation.")

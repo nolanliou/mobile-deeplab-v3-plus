@@ -283,8 +283,9 @@ def deeplab_v3_plus_model_fn(features,
                              labels,
                              mode,
                              params):
+    num_classes = params['num_classes']
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-    deep_model = DeeplabV3Plus(num_classes=params['num_classes'],
+    deep_model = DeeplabV3Plus(num_classes=num_classes,
                                model_input_size=params['model_input_size'],
                                output_stride=params['output_stride'],
                                weight_decay=params['weight_decay'])
@@ -292,19 +293,24 @@ def deeplab_v3_plus_model_fn(features,
                                      is_training=is_training)
     pred_labels = tf.expand_dims(
         tf.argmax(logits, axis=3, output_type=tf.int32), axis=3)
+    one_hot_labels = tf.one_hot(labels,
+                                depth=num_classes,
+                                on_value=1.0,
+                                off_value=0.0,
+                                axis=-1)
 
-    logits_by_num_classes = tf.reshape(logits, [-1, params['num_classes']])
+    logits_by_num_classes = tf.reshape(logits, [-1, num_classes])
+    labels_by_num_classes = tf.reshape(one_hot_labels, [-1, num_classes])
+
     labels_flat = tf.reshape(labels, [-1, ])
-    pred_labels_flat = tf.reshape(pred_labels, [-1, ])
-
-    valid_indices = tf.to_int32(labels_flat <= params['num_classes'] - 1)
-
-    logits_flat = tf.dynamic_partition(logits_by_num_classes, valid_indices,
+    valid_indices = tf.to_int32(labels_flat <= (num_classes - 1))
+    valid_labels = tf.dynamic_partition(labels_flat, valid_indices,
+                                        num_partitions=2)[1]
+    valid_preds = tf.dynamic_partition(tf.reshape(pred_labels, [-1, ]),
+                                       valid_indices,
                                        num_partitions=2)[1]
-    labels_flat = tf.dynamic_partition(labels_flat, valid_indices,
-                                       num_partitions=2)[1]
-    pred_labels_flat = tf.dynamic_partition(pred_labels_flat, valid_indices,
-                                            num_partitions=2)[1]
+    labels_flat = tf.reshape(valid_labels, [-1, ])
+    pred_labels_flat = tf.reshape(valid_preds, [-1, ])
 
     confusion_matrix = tf.confusion_matrix(
         labels_flat,
@@ -317,60 +323,70 @@ def deeplab_v3_plus_model_fn(features,
         'confusion_matrix': confusion_matrix,
     }
 
-    loss = tf.losses.sparse_softmax_cross_entropy(logits=logits_flat,
-                                                  labels=labels_flat)
+    # Predict
+    if mode == tf.estimator.ModeKeys.PREDICT:
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=predictions
+        )
 
-    # Create a tensor named cross_entropy for logging purposes.
-    tf.identity(loss, name='loss')
-    tf.summary.scalar('loss', loss)
+    with tf.name_scope('loss'):
+        cross_entropy = tf.losses.softmax_cross_entropy(
+            logits=logits_by_num_classes, onehot_labels=labels_by_num_classes)
 
-    train_op = None
+        # Create a tensor named cross_entropy for logging purposes.
+        tf.identity(cross_entropy, name='loss')
+        tf.summary.scalar('cross_entropy', cross_entropy)
 
-    if is_training:
-        images = tf.cast(
-            tf.map_fn(decode_org_image, features),
-            tf.uint8)
-        # Scale up summary image pixel values for better visualization.
-        pixel_scaling = max(1, 255 // params['num_classes'])
-        summary_label = tf.cast(labels * pixel_scaling, tf.uint8)
-
-        summary_pred_labels = tf.cast(pred_labels * pixel_scaling, tf.uint8)
-        tf.summary.image('samples/image', images)
-        tf.summary.image('samples/label', summary_label)
-        tf.summary.image('samples/prediction', summary_pred_labels)
-
-        global_step = tf.train.get_or_create_global_step()
-        learning_rate = get_model_learning_rate(
-            global_step,
-            params['learning_policy'],
-            params['base_learning_rate'],
-            params['learning_rate_decay_step'],
-            params['learning_rate_decay_factor'],
-            params['training_number_of_steps'],
-            params['learning_power'],
-            params['slow_start_step'],
-            params['slow_start_learning_rate'])
-        tf.identity(learning_rate, name='learning_rate')
-        tf.summary.scalar('learning_rate', learning_rate)
-
-        optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
-                                               momentum=params['momentum'])
-        # Batch norm requires update ops to be added as a dependency to
-        # the train_op
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops):
-            train_op = optimizer.minimize(loss, global_step)
-
-    # summary
-    accuracy = tf.metrics.accuracy(
-        labels_flat, pred_labels_flat)
-    mean_iou = tf.metrics.mean_iou(labels_flat, pred_labels_flat,
-                                   params['num_classes'])
+    with tf.name_scope('accuracy'):
+        accuracy = tf.metrics.accuracy(
+            labels_flat, pred_labels_flat)
+        mean_iou = tf.metrics.mean_iou(labels_flat, pred_labels_flat,
+                                       params['num_classes'])
     metrics = {'pixel_accuracy': accuracy, 'mean_iou': mean_iou}
 
-    # Create a tensor named train_accuracy for logging purposes
-    tf.identity(accuracy[1], name='train_pixel_accuracy')
-    tf.summary.scalar('train_pixel_accuracy', accuracy[1])
+    # evaluation
+    if mode == tf.estimator.ModeKeys.EVAL:
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            loss=cross_entropy,
+            eval_metric_ops=metrics,
+            evaluation_hooks=None,
+        )
+
+    images = tf.cast(
+        tf.map_fn(decode_org_image, features),
+        tf.uint8)
+    # Scale up summary image pixel values for better visualization.
+    pixel_scaling = max(1, 255 // params['num_classes'])
+    summary_label = tf.cast(labels * pixel_scaling, tf.uint8)
+
+    summary_pred_labels = tf.cast(pred_labels * pixel_scaling, tf.uint8)
+    tf.summary.image('samples/image', images)
+    tf.summary.image('samples/label', summary_label)
+    tf.summary.image('samples/prediction', summary_pred_labels)
+
+    global_step = tf.train.get_or_create_global_step()
+    learning_rate = get_model_learning_rate(
+        global_step,
+        params['learning_policy'],
+        params['base_learning_rate'],
+        params['learning_rate_decay_step'],
+        params['learning_rate_decay_factor'],
+        params['training_number_of_steps'],
+        params['learning_power'],
+        params['slow_start_step'],
+        params['slow_start_learning_rate'])
+    tf.identity(learning_rate, name='learning_rate')
+    tf.summary.scalar('learning_rate', learning_rate)
+
+    optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
+                                           momentum=params['momentum'])
+    # Batch norm requires update ops to be added as a dependency to
+    # the train_op
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+        train_op = optimizer.minimize(cross_entropy, global_step)
 
     def compute_mean_iou(total_cm, name='mean_iou'):
         """Compute the mean intersection-over-union via the confusion matrix."""
@@ -409,11 +425,21 @@ def deeplab_v3_plus_model_fn(features,
     tf.identity(train_mean_iou, name='train_mean_iou')
     tf.summary.scalar('train_mean_iou', train_mean_iou)
 
+    tensors_to_log = {
+        'learning_rate': learning_rate,
+        'cross_entropy': cross_entropy,
+        'train_pixel_accuracy': accuracy[1],
+        'train_mean_iou': train_mean_iou,
+    }
+
+    logging_hook = tf.train.LoggingTensorHook(
+        tensors=tensors_to_log, every_n_iter=10)
+    train_hooks = [logging_hook]
+
     return tf.estimator.EstimatorSpec(
         mode=mode,
-        loss=loss,
+        loss=cross_entropy,
         train_op=train_op,
-        predictions=predictions,
-        eval_metric_ops=metrics,
+        training_hooks=train_hooks
     )
 
