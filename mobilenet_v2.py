@@ -83,10 +83,12 @@ class MobilenetV2(object):
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(net)
             if not use_bias and use_bn:
                 # there is no trainable of tf.keras.layers.BatchNormalization
-                # in TF-1.8
-                net = tf.layers.BatchNormalization(
+                # in TF-1.8?
+                net = tf.layers.batch_normalization(
+                    net,
                     momentum=bn_momentum,
-                    trainable=is_training)(net)
+                    training=is_training,
+                    trainable=is_training)
             if activation_fn:
                 net = activation_fn(net)
             return net

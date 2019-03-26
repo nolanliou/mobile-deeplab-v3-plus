@@ -6,6 +6,7 @@ set -e
 # Update PYTHONPATH.
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
+MODEL_TYPE='unet'
 # Set up the working environment.
 CURRENT_DIR=$(pwd)
 WORK_DIR="${CURRENT_DIR}"
@@ -23,12 +24,12 @@ cd "${CURRENT_DIR}"
 
 # Set up the working directories.
 PASCAL_FOLDER="pascal_voc2012"
-EXP_FOLDER="exp/train_on_trainval_set_mobilenetv2"
+EXP_FOLDER="exp"
 #INIT_FOLDER="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/init_models"
-TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/train"
-#EVAL_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/eval"
-#VIS_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/vis"
-#EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/export"
+TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/train"
+#EVAL_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/eval"
+#VIS_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/vis"
+#EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/export"
 #mkdir -p "${INIT_FOLDER}"
 mkdir -p "${TRAIN_LOGDIR}"
 #mkdir -p "${EVAL_LOGDIR}"
@@ -38,4 +39,5 @@ mkdir -p "${TRAIN_LOGDIR}"
 PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 
 python train.py --dataset_dir="${PASCAL_DATASET}"\
-  --train_logdir="${TRAIN_LOGDIR}"
+  --train_logdir="${TRAIN_LOGDIR}" \
+  --model_type="${MODEL_TYPE}"

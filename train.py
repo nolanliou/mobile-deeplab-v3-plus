@@ -1,11 +1,13 @@
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 
-import deeplab_v3_plus
-
 # tf.enable_eager_execution()
 
 from segmentation_dataset import SegmentationDataset
+from deeplab_v3_plus import DeeplabV3Plus
+from input_preprocess import decode_org_image
+from unet import UNet
+from utils import get_model_learning_rate
 
 flags = tf.app.flags
 
@@ -76,7 +78,7 @@ flags.DEFINE_integer('epochs_per_eval', 1,
 flags.DEFINE_float('weight_decay', 0.00004,
                    'The value of the weight decay for training.')
 
-flags.DEFINE_multi_integer('model_input_size', [513, 513],
+flags.DEFINE_multi_integer('model_input_size', [512, 512],
                            'Image crop size [height, width] during training.')
 
 flags.DEFINE_float('last_layer_gradient_multiplier', 1.0,
@@ -131,8 +133,184 @@ flags.DEFINE_string('dataset_dir', None, 'Where the dataset reside.')
 
 flags.DEFINE_boolean('debug', False, 'Debug or not')
 
+flags.DEFINE_string('model_type', "deeplab-v3+", 'which model to use.')
+
+
+def segmentation_model_fn(features,
+                          labels,
+                          mode,
+                          params):
+    num_classes = params['num_classes']
+    is_training = (mode == tf.estimator.ModeKeys.TRAIN)
+    if params['model_type'] == 'unet':
+        model = UNet(num_classes=num_classes)
+        logits = model.forward_pass(features,
+                                    is_training=is_training)
+    else:
+        model = DeeplabV3Plus(num_classes=num_classes,
+                              model_input_size=params['model_input_size'],
+                              output_stride=params['output_stride'],
+                              weight_decay=params['weight_decay'])
+        logits = model.forward_pass(features,
+                                    is_training=is_training)
+    pred_labels = tf.expand_dims(
+        tf.argmax(logits, axis=3, output_type=tf.int32), axis=3)
+    one_hot_labels = tf.one_hot(labels,
+                                depth=num_classes,
+                                on_value=1.0,
+                                off_value=0.0,
+                                axis=-1)
+
+    logits_by_num_classes = tf.reshape(logits, [-1, num_classes])
+    labels_by_num_classes = tf.reshape(one_hot_labels, [-1, num_classes])
+
+    labels_flat = tf.reshape(labels, [-1, ])
+    valid_indices = tf.to_int32(labels_flat <= (num_classes - 1))
+    valid_labels = tf.dynamic_partition(labels_flat, valid_indices,
+                                        num_partitions=2)[1]
+    valid_preds = tf.dynamic_partition(tf.reshape(pred_labels, [-1, ]),
+                                       valid_indices,
+                                       num_partitions=2)[1]
+    labels_flat = tf.reshape(valid_labels, [-1, ])
+    pred_labels_flat = tf.reshape(valid_preds, [-1, ])
+
+    confusion_matrix = tf.confusion_matrix(
+        labels_flat,
+        pred_labels_flat,
+        num_classes=params['num_classes'])
+
+    predictions = {
+        'gt_classes': labels,
+        'pred_classes': pred_labels,
+        'confusion_matrix': confusion_matrix,
+    }
+
+    # Predict
+    if mode == tf.estimator.ModeKeys.PREDICT:
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=predictions
+        )
+
+    with tf.name_scope('loss'):
+        cross_entropy = tf.losses.softmax_cross_entropy(
+            logits=logits_by_num_classes, onehot_labels=labels_by_num_classes)
+
+        # Create a tensor named cross_entropy for logging purposes.
+        tf.identity(cross_entropy, name='loss')
+        tf.summary.scalar('cross_entropy', cross_entropy)
+
+    with tf.name_scope('accuracy'):
+        accuracy = tf.metrics.accuracy(
+            labels_flat, pred_labels_flat)
+        mean_iou = tf.metrics.mean_iou(labels_flat, pred_labels_flat,
+                                       params['num_classes'])
+    metrics = {'pixel_accuracy': accuracy, 'mean_iou': mean_iou}
+
+    # evaluation
+    if mode == tf.estimator.ModeKeys.EVAL:
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            loss=cross_entropy,
+            eval_metric_ops=metrics,
+            evaluation_hooks=None,
+        )
+
+    images = tf.cast(
+        tf.map_fn(decode_org_image, features),
+        tf.uint8)
+    # Scale up summary image pixel values for better visualization.
+    pixel_scaling = max(1, 255 // params['num_classes'])
+    summary_label = tf.cast(labels * pixel_scaling, tf.uint8)
+
+    summary_pred_labels = tf.cast(pred_labels * pixel_scaling, tf.uint8)
+    tf.summary.image('samples/image', images)
+    tf.summary.image('samples/label', summary_label)
+    tf.summary.image('samples/prediction', summary_pred_labels)
+
+    global_step = tf.train.get_or_create_global_step()
+    learning_rate = get_model_learning_rate(
+        global_step,
+        params['learning_policy'],
+        params['base_learning_rate'],
+        params['learning_rate_decay_step'],
+        params['learning_rate_decay_factor'],
+        params['training_number_of_steps'],
+        params['learning_power'],
+        params['slow_start_step'],
+        params['slow_start_learning_rate'])
+    tf.identity(learning_rate, name='learning_rate')
+    tf.summary.scalar('learning_rate', learning_rate)
+
+    optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate,
+                                           momentum=params['momentum'])
+    # Batch norm requires update ops to be added as a dependency to
+    # the train_op
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+        train_op = optimizer.minimize(cross_entropy, global_step)
+
+    def compute_mean_iou(total_cm, name='mean_iou'):
+        """Compute the mean intersection-over-union via the confusion matrix."""
+        sum_over_row = tf.to_float(tf.reduce_sum(total_cm, 0))
+        sum_over_col = tf.to_float(tf.reduce_sum(total_cm, 1))
+        cm_diag = tf.to_float(tf.diag_part(total_cm))
+        denominator = sum_over_row + sum_over_col - cm_diag
+
+        # The mean is only computed over classes that appear in the
+        # label or prediction tensor. If the denominator is 0, we need to
+        # ignore the class.
+        num_valid_entries = tf.reduce_sum(tf.cast(
+            tf.not_equal(denominator, 0), dtype=tf.float32))
+
+        # If the value of the denominator is 0, set it to 1 to avoid
+        # zero division.
+        denominator = tf.where(
+            tf.greater(denominator, 0),
+            denominator,
+            tf.ones_like(denominator))
+        iou = tf.div(cm_diag, denominator)
+
+        for i in range(params['num_classes']):
+            tf.identity(iou[i], name='train_iou_class{}'.format(i))
+            tf.summary.scalar('train_iou_class{}'.format(i), iou[i])
+
+        # If the number of valid entries is 0 (no classes) we return 0.
+        result = tf.where(
+            tf.greater(num_valid_entries, 0),
+            tf.reduce_sum(iou, name=name) / num_valid_entries,
+            0)
+        return result
+
+    train_mean_iou = compute_mean_iou(mean_iou[1])
+
+    tf.identity(train_mean_iou, name='train_mean_iou')
+    tf.summary.scalar('train_mean_iou', train_mean_iou)
+
+    tensors_to_log = {
+        'learning_rate': learning_rate,
+        'cross_entropy': cross_entropy,
+        'train_pixel_accuracy': accuracy[1],
+        'train_mean_iou': train_mean_iou,
+    }
+
+    logging_hook = tf.train.LoggingTensorHook(
+        tensors=tensors_to_log, every_n_iter=10)
+    train_hooks = [logging_hook]
+
+    return tf.estimator.EstimatorSpec(
+        mode=mode,
+        loss=cross_entropy,
+        train_op=train_op,
+        training_hooks=train_hooks
+    )
+
 
 def main(unused_argv):
+    if FLAGS.model_type not in ['unet', 'deeplab-v3+']:
+        raise ValueError('Only support unet and deeplab-v3+ but got ',
+                         FLAGS.model_type)
+
     tf.logging.set_verbosity(tf.logging.INFO)
 
     train_dataset = SegmentationDataset(
@@ -154,10 +332,11 @@ def main(unused_argv):
         is_training=False)
     run_config = tf.estimator.RunConfig()
     model = tf.estimator.Estimator(
-        model_fn=deeplab_v3_plus.deeplab_v3_plus_model_fn,
+        model_fn=segmentation_model_fn,
         model_dir=FLAGS.train_logdir,
         config=run_config,
         params={
+            'model_type': FLAGS.model_type,
             'num_classes': train_dataset.get_num_classes(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
