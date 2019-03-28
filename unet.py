@@ -35,11 +35,8 @@ class UNet(object):
                 kernel_initializer=kernel_initializer,
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(net)
             if not use_bias and use_bn:
-                net = tf.layers.batch_normalization(
-                    net,
-                    trainable=is_training,
-                    training=is_training,
-                    momentum=bn_momentum)
+                net = tf.keras.layers.BatchNormalization(
+                    momentum=bn_momentum)(net, training=is_training)
             if activation_fn:
                 net = activation_fn(net)
             return net
@@ -47,13 +44,16 @@ class UNet(object):
     @staticmethod
     def _upsample(input_tensors,
                   weight_decay=0.0004,
+                  stddev=0.09,
                   scope=None):
         with tf.variable_scope(scope, default_name="upsample"):
+            kernel_initializer = tf.truncated_normal_initializer(stddev=stddev)
             input_depth = input_tensors[0].get_shape().as_list()[3]
             net = tf.keras.layers.Conv2DTranspose(
                 filters=(input_depth // 2),
                 kernel_size=[2, 2],
                 strides=[2, 2],
+                kernel_initializer=kernel_initializer,
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                 use_bias=False)(input_tensors[0])
             net = tf.keras.layers.Concatenate()([net, input_tensors[1]])

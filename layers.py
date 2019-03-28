@@ -36,10 +36,9 @@ def depthwise_conv(input_tensor,
         if not use_bias and use_bn:
             # there is no trainable of tf.keras.layers.BatchNormalization
             # in TF-1.8
-            net = tf.layers.BatchNormalization(
+            net = tf.keras.layers.BatchNormalization(
                 momentum=bn_momentum,
-                epsilon=bn_epsilon,
-                trainable=is_training)(net)
+                epsilon=bn_epsilon)(net, training=is_training)
         if activation_fn:
             net = activation_fn(net)
         return net
