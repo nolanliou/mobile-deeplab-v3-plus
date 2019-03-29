@@ -61,7 +61,7 @@ class DeeplabV3Plus(object):
             else:
                 kernel_initializer = \
                     tf.contrib.layers.xavier_initializer()
-            net = tf.keras.layers.Conv2D(
+            conv2d = tf.keras.layers.Conv2D(
                 filters=num_outputs,
                 kernel_size=kernel_size,
                 strides=stride,
@@ -69,7 +69,9 @@ class DeeplabV3Plus(object):
                 dilation_rate=dilation_rate,
                 use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(net)
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+            net = conv2d(net)
+            tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
                 # there is no trainable of tf.keras.layers.BatchNormalization
                 # in TF-1.8
@@ -78,6 +80,7 @@ class DeeplabV3Plus(object):
                     epsilon=bn_epsilon)(net, training=is_training)
             if activation_fn:
                 net = activation_fn(net)
+                tf.summary.histogram('Activation', net)
             return net
 
     @staticmethod
@@ -220,6 +223,7 @@ class DeeplabV3Plus(object):
 
     def encode(self,
                input_tensor,
+               pretrained_model_dir,
                is_training=True):
         # extract features
         mobilenet_model = MobilenetV2(
@@ -231,6 +235,16 @@ class DeeplabV3Plus(object):
             input_tensor,
             _MOBILENET_V2_FINAL_ENDPOINT,
             is_training=is_training)
+        
+        base_architecture = 'MobilenetV2'
+        
+        if is_training:
+            exclude = [base_architecture + '/Logits', 'global_step']
+            variables_to_restore = tf.contrib.slim.get_variables_to_restore(
+                exclude=exclude)
+            tf.train.init_from_checkpoint(pretrained_model_dir,
+                                          {v.name.split(':')[0]: v for v in
+                                           variables_to_restore})
 
         features = self._atrous_spatial_pyramid_pooling(
             features, weight_decay=self.weight_decay, is_training=is_training)
@@ -243,9 +257,10 @@ class DeeplabV3Plus(object):
                is_training=True):
         pass
 
-    def forward_pass(self,
-                     input_tensor,
-                     is_training=True):
+    def forward(self,
+                input_tensor,
+                pretrained_model_dir,
+                is_training=True):
         input_height = (
             self.model_input_size[0]
             if self.model_input_size else tf.shape(input_tensor)[1])
@@ -253,7 +268,9 @@ class DeeplabV3Plus(object):
             self.model_input_size[1]
             if self.model_input_size else tf.shape(input_tensor)[2])
 
-        features, endpoints = self.encode(input_tensor, is_training)
+        features, endpoints = self.encode(input_tensor,
+                                          pretrained_model_dir,
+                                          is_training)
 
         # if self.decoder_output_stride is not None:
         #     features = self.decode(features, endpoints)

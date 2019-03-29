@@ -36,7 +36,7 @@ class DeeplabModelTest(tf.test.TestCase):
             with self.test_session(graph=g) as sess:
                 inputs = tf.random_uniform(
                     (1, input_size[0], input_size[1], 3))
-                logits = model.forward_pass(inputs)
+                logits = model.forward(inputs)
                 # for t in logits.graph.get_operations():
                 #     print(t.name)
 

@@ -6,7 +6,7 @@ set -e
 # Update PYTHONPATH.
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
-MODEL_TYPE='unet'
+MODEL_TYPE='deeplab-v3-plus'
 # Set up the working environment.
 CURRENT_DIR=$(pwd)
 WORK_DIR="${CURRENT_DIR}"

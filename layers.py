@@ -21,12 +21,14 @@ def depthwise_conv(input_tensor,
     in_channel = input_tensor.get_shape().as_list()[-1]
     net = input_tensor
     kernel_initializer = tf.truncated_normal_initializer(stddev=stddev)
-    with tf.variable_scope(scope, default_name="conv"):
+    with tf.variable_scope(scope, default_name="depthwise"):
+        # keras.layers.DepthwiseConv2D do not support dilation
         weight = tf.get_variable(
-            'weight',
+            'depthwise_weights',
             [kernel_size, kernel_size, in_channel, depth_multiplier],
             regularizer=None,
             initializer=kernel_initializer)
+        tf.summary.histogram('Weights', weight)
         net = tf.nn.depthwise_conv2d(
             net,
             weight,
@@ -38,7 +40,8 @@ def depthwise_conv(input_tensor,
             # in TF-1.8
             net = tf.keras.layers.BatchNormalization(
                 momentum=bn_momentum,
-                epsilon=bn_epsilon)(net, training=is_training)
+                epsilon=bn_epsilon,
+                name='BatchNorm')(net, training=is_training)
         if activation_fn:
             net = activation_fn(net)
         return net

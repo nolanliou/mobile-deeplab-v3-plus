@@ -38,6 +38,46 @@ def depth_multiply(output_params,
                                                    min_depth)
 
 
+class Conv2DBN(tf.keras.layers.Layer):
+    def __init__(self,
+                 num_outputs,
+                 kernel_size,
+                 stride=1,
+                 padding='SAME',
+                 dilation_rate=1,
+                 stddev=0.09,
+                 weight_decay=0.00004,
+                 use_bias=False,
+                 use_bn=True,
+                 bn_momentum=0.997,
+                 activation_fn=tf.nn.relu6):
+        super(Conv2DBN, self).__init__()
+        kernel_initializer = tf.truncated_normal_initializer(stddev=stddev)
+        self.conv2d = tf.keras.layers.Conv2D(
+            filters=num_outputs,
+            kernel_size=kernel_size,
+            strides=stride,
+            padding=padding,
+            dilation_rate=dilation_rate,
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+        if not use_bias and use_bn:
+            self.bn = tf.keras.layers.BatchNormalization(
+                momentum=bn_momentum,
+                center=True,
+                scale=True)
+        self.activation = activation_fn
+
+    def call(self, inputs, training=True):
+        x = self.conv2d(inputs)
+        if self.bn:
+            x = self.bn(x, training=training)
+        if self.activation:
+            x = self.activation(x)
+        return x
+
+
 class MobilenetV2(object):
     def __init__(self,
                  output_stride=None,
@@ -71,8 +111,8 @@ class MobilenetV2(object):
                 scope=None):
         net = input_tensor
         kernel_initializer = tf.truncated_normal_initializer(stddev=stddev)
-        with tf.variable_scope(scope, default_name="conv"):
-            net = tf.keras.layers.Conv2D(
+        with tf.variable_scope(scope, default_name="Conv"):
+            conv2d = tf.keras.layers.Conv2D(
                 filters=num_outputs,
                 kernel_size=kernel_size,
                 strides=stride,
@@ -80,12 +120,16 @@ class MobilenetV2(object):
                 dilation_rate=dilation_rate,
                 use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(net)
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+            net = conv2d(net)
+            tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
                 net = tf.keras.layers.BatchNormalization(
-                    momentum=bn_momentum)(net, training=is_training)
+                    momentum=bn_momentum,
+                    name='BatchNorm')(net, training=is_training)
             if activation_fn:
                 net = activation_fn(net)
+                tf.summary.histogram('Activation', net)
             return net
 
     @staticmethod
@@ -96,7 +140,7 @@ class MobilenetV2(object):
                        padding='SAME',
                        dilation_rate=1,
                        expansion_size=expand_input_by_factor(6),
-                       depthwise_location='expansion',
+                       depthwise_location='expand',
                        depthwise_multiplier=1,
                        weight_decay=0.00004,
                        residual=True,
@@ -106,7 +150,7 @@ class MobilenetV2(object):
         net = input_tensor
         with tf.variable_scope(scope, default_name="expanded_conv") as s, \
                 tf.name_scope(s.original_name_scope):
-            if depthwise_location not in [None, 'input', 'output', 'expansion']:
+            if depthwise_location not in [None, 'input', 'output', 'expand']:
                 raise TypeError('%r is unknown value for depthwise_location' %
                                 depthwise_location)
             if callable(expansion_size):
@@ -114,14 +158,14 @@ class MobilenetV2(object):
             else:
                 expansion_chan = expansion_size
             # expansion
-            if depthwise_location == 'expansion':
+            if depthwise_location == 'expand':
                 net = MobilenetV2._conv2d(net,
                                           num_outputs=expansion_chan,
                                           kernel_size=[1, 1],
                                           weight_decay=weight_decay,
                                           is_training=is_training,
-                                          scope="expansion")
-                net = tf.identity(net, name="expansion_output")
+                                          scope="expand")
+                net = tf.identity(net, name="expand_output")
             # depthwise convolution
             net = layers.depthwise_conv(
                 net,
@@ -140,8 +184,8 @@ class MobilenetV2(object):
                                       weight_decay=weight_decay,
                                       activation_fn=None,
                                       is_training=is_training,
-                                      scope="projection")
-            net = tf.identity(net, name="projection_output")
+                                      scope="project")
+            net = tf.identity(net, name="project_output")
             output_depth = net.get_shape().as_list()[3]
             if residual and stride == 1 and input_depth == output_depth:
                 net += input_tensor
@@ -236,25 +280,25 @@ class MobilenetV2(object):
                           (i, opdef, params))
                     raise
                 endpoints[endpoint] = net
-                scope = os.path.dirname(net.name)
-                scopes[scope] = endpoint
+                scope_name = os.path.dirname(net.name)
+                scopes[scope_name] = endpoint
                 if final_endpoint is not None and endpoint == final_endpoint:
                     break
             # Add all tensors that end with 'output' to endpoints
             for t in net.graph.get_operations():
-                scope = os.path.dirname(t.name)
+                scope_name = os.path.dirname(t.name)
                 bn = os.path.basename(t.name)
-                if scope in scopes and t.name.endswith('output'):
-                    endpoints[scopes[scope] + '/' + bn] = t.outputs[0]
+                if scope_name in scopes and t.name.endswith('output'):
+                    endpoints[scopes[scope_name] + '/' + bn] = t.outputs[0]
             return net, endpoints
 
-    def forward_pass(self,
-                     input_tensor,
-                     num_classes=1001,
-                     final_endpoint=None,
-                     prediction_fn=tf.nn.softmax,
-                     is_training=True,
-                     base_only=False):
+    def forward(self,
+                input_tensor,
+                num_classes=1001,
+                final_endpoint=None,
+                prediction_fn=tf.nn.softmax,
+                is_training=True,
+                base_only=False):
         input_shape = input_tensor.get_shape().as_list()
         if len(input_shape) != 4:
             raise ValueError(

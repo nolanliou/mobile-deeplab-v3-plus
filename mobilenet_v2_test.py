@@ -42,7 +42,7 @@ class MobilenetV2Test(tf.test.TestCase):
 
     def testCreation(self):
         model = MobilenetV2()
-        net, endpoints = model.forward_pass(
+        net, endpoints = model.forward(
             tf.placeholder(tf.float32, (10, 224, 224, 16)))
 
         # for t in net.graph.get_operations():
@@ -62,7 +62,7 @@ class MobilenetV2Test(tf.test.TestCase):
 
     def testCreationNoClasses(self):
         model = MobilenetV2()
-        net, endpoints = model.forward_pass(
+        net, endpoints = model.forward(
             tf.placeholder(tf.float32, (10, 224, 224, 16)),
             num_classes=None)
         self.assertIs(net, endpoints['global_pool'])
@@ -72,7 +72,7 @@ class MobilenetV2Test(tf.test.TestCase):
         for input_size, output_size in [(224, 7), (192, 6), (160, 5),
                                         (128, 4), (96, 3)]:
             tf.reset_default_graph()
-            net, endpoints = model.forward_pass(
+            net, endpoints = model.forward(
                 tf.placeholder(tf.float32, (10, input_size, input_size, 16)))
 
             self.assertEqual(
@@ -88,7 +88,7 @@ class MobilenetV2Test(tf.test.TestCase):
     def testDivisibleBy(self):
         tf.reset_default_graph()
         model = MobilenetV2(divisible_by=16, min_depth=32)
-        net, _ = model.forward_pass(
+        net, _ = model.forward(
             tf.placeholder(tf.float32, (10, 224, 224, 16)))
         s = [op.outputs[0].get_shape().as_list()[-1] for op in
              find_ops('Conv2D')]
@@ -99,7 +99,7 @@ class MobilenetV2Test(tf.test.TestCase):
     def testDivisibleByWithMultiplier(self):
         tf.reset_default_graph()
         model = MobilenetV2(depth_multiplier=0.1, min_depth=32)
-        net, _ = model.forward_pass(
+        net, _ = model.forward(
             tf.placeholder(tf.float32, (10, 224, 224, 16)))
         s = [op.outputs[0].get_shape().as_list()[-1] for op in
              find_ops('Conv2D')]

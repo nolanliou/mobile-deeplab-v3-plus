@@ -105,3 +105,4 @@ ENV/
 
 # dataset
 datasets/pascal_voc2012
+pretrained_model

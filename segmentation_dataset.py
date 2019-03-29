@@ -196,6 +196,17 @@ class SegmentationDataset(object):
 
         dataset = dataset.map(self.parser)
         for image, label in dataset:
+            count = {}
+            image_flat = tf.reshape(image, [-1])
+            for value in image_flat.numpy():
+                if value not in count:
+                    count[value] = 0
+                count[value] += 1
+            print(count[0.0])
+            import operator
+            sorted_count = sorted(count.items(), key=operator.itemgetter(1), reverse=True)
+            for i in range(10):
+                print sorted_count[i]
             org_image = input_preprocess.decode_org_image(image)
             image_shape = tf.shape(image)
             org_image = tf.cast(org_image, tf.uint8)
@@ -219,8 +230,8 @@ if __name__ == '__main__':
         "pascal_voc2012",
         "datasets/pascal_voc2012/tfrecord",
         "train",
-        513,
-        513)
+        512,
+        512)
 
     print('num classes:', dataset.get_num_classes())
     dataset.show_image()

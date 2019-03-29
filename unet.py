@@ -25,7 +25,7 @@ class UNet(object):
         net = input_tensor
         kernel_initializer = tf.truncated_normal_initializer(stddev=stddev)
         with tf.variable_scope(scope, default_name="conv"):
-            net = tf.keras.layers.Conv2D(
+            conv2d = tf.keras.layers.Conv2D(
                 filters=num_outputs,
                 kernel_size=kernel_size,
                 strides=stride,
@@ -33,7 +33,8 @@ class UNet(object):
                 dilation_rate=dilation_rate,
                 use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))(net)
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+            net = conv2d(net)
             if not use_bias and use_bn:
                 net = tf.keras.layers.BatchNormalization(
                     momentum=bn_momentum)(net, training=is_training)

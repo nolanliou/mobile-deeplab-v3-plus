@@ -58,12 +58,12 @@ flags.DEFINE_float('momentum', 0.9, 'The momentum value to use')
 # When fine_tune_batch_norm=True, use at least batch size larger than 12
 # (batch size more than 16 is better). Otherwise, one could use smaller batch
 # size and set fine_tune_batch_norm=False.
-flags.DEFINE_integer('batch_size', 8,
+flags.DEFINE_integer('batch_size', 4,
                      'The number of images in each batch during training.')
 
-flags.DEFINE_integer('train_epochs', 23,
+flags.DEFINE_integer('train_epochs', 12,
                      help='Number of training epochs: '
-                          'For 30K iteration with batch size 6, train_epoch = 17.01 (= 30K * 6 / 10,582). '
+                          'For 30K iteration with batch size 4, train_epoch = 11.32 (= 30K * 4 / 10,582). '
                           'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
                           'For 30K iteration with batch size 10, train_epoch = 25.52 (= 30K * 10 / 10,582). '
                           'For 30K iteration with batch size 11, train_epoch = 31.19 (= 30K * 11 / 10,582). '
@@ -133,7 +133,10 @@ flags.DEFINE_string('dataset_dir', None, 'Where the dataset reside.')
 
 flags.DEFINE_boolean('debug', False, 'Debug or not')
 
-flags.DEFINE_string('model_type', "deeplab-v3+", 'which model to use.')
+flags.DEFINE_string('model_type', "deeplab-v3-plus", 'which model to use.')
+
+flags.DEFINE_string('pretrained_model_dir', "pretrained_model",
+                    'pretrained model dir.')
 
 
 def segmentation_model_fn(features,
@@ -151,8 +154,9 @@ def segmentation_model_fn(features,
                               model_input_size=params['model_input_size'],
                               output_stride=params['output_stride'],
                               weight_decay=params['weight_decay'])
-        logits = model.forward_pass(features,
-                                    is_training=is_training)
+        logits = model.forward(features,
+                               params['pretrained_model_dir'],
+                               is_training=is_training)
     pred_labels = tf.expand_dims(
         tf.argmax(logits, axis=3, output_type=tf.int32), axis=3)
     one_hot_labels = tf.one_hot(labels,
@@ -307,7 +311,7 @@ def segmentation_model_fn(features,
 
 
 def main(unused_argv):
-    if FLAGS.model_type not in ['unet', 'deeplab-v3+']:
+    if FLAGS.model_type not in ['unet', 'deeplab-v3-plus']:
         raise ValueError('Only support unet and deeplab-v3+ but got ',
                          FLAGS.model_type)
 
@@ -337,6 +341,7 @@ def main(unused_argv):
         config=run_config,
         params={
             'model_type': FLAGS.model_type,
+            'pretrained_model_dir': FLAGS.pretrained_model_dir,
             'num_classes': train_dataset.get_num_classes(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
@@ -344,7 +349,7 @@ def main(unused_argv):
             'batch_size': FLAGS.batch_size,
             'learning_policy': FLAGS.learning_policy,
             'base_learning_rate': FLAGS.base_learning_rate,
-            'learning_rate_decay_step': FLAGS.learning_rate_decay_step,
+            'learning_rate_decay_step': 10582 // FLAGS.batch_size,
             'learning_rate_decay_factor': FLAGS.learning_rate_decay_factor,
             'training_number_of_steps': FLAGS.training_number_of_steps,
             'learning_power': FLAGS.learning_power,
