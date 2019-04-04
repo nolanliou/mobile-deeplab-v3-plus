@@ -6,7 +6,7 @@ import tensorflow as tf
 
 # tf.enable_eager_execution()
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 import input_preprocess
 # borrow from tensorflow models
@@ -99,6 +99,9 @@ class SegmentationDataset(object):
     def get_num_classes(self):
         return _DATASETS_INFORMATION[self.dataset_name].num_classes
 
+    def get_num_data(self):
+        return _DATASETS_INFORMATION[self.dataset_name].subset_to_sizes[self.subset]
+
     def _get_filenames(self):
         if self.dataset_name not in _DATASETS_INFORMATION:
             raise ValueError('The specified dataset is not supported yet.')
@@ -190,40 +193,39 @@ class SegmentationDataset(object):
         iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()
 
-    def show_image(self):
-        filenames = self._get_filenames()
-        dataset = tf.data.TFRecordDataset(filenames)
-
-        dataset = dataset.map(self.parser)
-        for image, label in dataset:
-            count = {}
-            image_flat = tf.reshape(image, [-1])
-            for value in image_flat.numpy():
-                if value not in count:
-                    count[value] = 0
-                count[value] += 1
-            print(count[0.0])
-            import operator
-            sorted_count = sorted(count.items(), key=operator.itemgetter(1), reverse=True)
-            for i in range(10):
-                print sorted_count[i]
-            org_image = input_preprocess.decode_org_image(image)
-            image_shape = tf.shape(image)
-            org_image = tf.cast(org_image, tf.uint8)
-            image = tf.cast(image, tf.uint8)
-            label = tf.squeeze(label)
-            print(image_shape)
-            fig = plt.figure()
-            fig.add_subplot(1, 3, 1)
-            plt.imshow(org_image)
-            fig.add_subplot(1, 3, 2)
-            plt.imshow(image)
-            fig.add_subplot(1, 3, 3)
-            print(tf.shape(label))
-            plt.imshow(label)
-            plt.show()
-            break
-
+#    def show_image(self):
+#        filenames = self._get_filenames()
+#        dataset = tf.data.TFRecordDataset(filenames)
+#
+#        dataset = dataset.map(self.parser)
+#        for image, label in dataset:
+#            count = {}
+#            image_flat = tf.reshape(image, [-1])
+#            for value in image_flat.numpy():
+#                if value not in count:
+#                    count[value] = 0
+#                count[value] += 1
+#            print(count[0.0])
+#            import operator
+#            sorted_count = sorted(count.items(), key=operator.itemgetter(1), reverse=True)
+#            for i in range(10):
+#                print sorted_count[i]
+#            org_image = input_preprocess.decode_org_image(image)
+#            image_shape = tf.shape(image)
+#            org_image = tf.cast(org_image, tf.uint8)
+#            image = tf.cast(image, tf.uint8)
+#            label = tf.squeeze(label)
+#            print(image_shape)
+#            fig = plt.figure()
+#            fig.add_subplot(1, 3, 1)
+#            plt.imshow(org_image)
+#            fig.add_subplot(1, 3, 2)
+#            plt.imshow(image)
+#            fig.add_subplot(1, 3, 3)
+#            print(tf.shape(label))
+#            plt.imshow(label)
+#            plt.show()
+#            break
 
 if __name__ == '__main__':
     dataset = SegmentationDataset(
@@ -234,5 +236,5 @@ if __name__ == '__main__':
         512)
 
     print('num classes:', dataset.get_num_classes())
-    dataset.show_image()
+#    dataset.show_image()
 

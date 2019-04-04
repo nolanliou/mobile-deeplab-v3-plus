@@ -8,8 +8,6 @@ export CUDA_VISIBLE_DEVICES=0
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
 MODEL_TYPE='deeplab-v3-plus'
-PRETRAINED_MODEL_DIR='pretrained_model'
-PRETRAINED_BACKBONE_MODEL_DIR='pretrained_backbone_model'
 # Set up the working environment.
 CURRENT_DIR=$(pwd)
 WORK_DIR="${CURRENT_DIR}"
@@ -36,7 +34,4 @@ PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 python run.py --dataset_dir="${PASCAL_DATASET}"\
   --logdir="${TRAIN_LOGDIR}" \
   --model_type="${MODEL_TYPE}" \
-  --pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
-
-#  --pretrained_model_dir="${PRETRAINED_MODEL_DIR}" \
-#  --training_number_of_steps=10
+  --mode=eval

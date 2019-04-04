@@ -15,7 +15,7 @@ FLAGS = flags.FLAGS
 
 # Settings for logging.
 
-flags.DEFINE_string('train_logdir', None,
+flags.DEFINE_string('logdir', None,
                     'Where the checkpoint and logs are stored.')
 
 flags.DEFINE_integer('log_steps', 10,
@@ -38,7 +38,7 @@ flags.DEFINE_enum('learning_policy', 'poly', ['poly', 'step'],
 
 # Use 0.007 when training on PASCAL augmented training set, train_aug. When
 # fine-tuning on PASCAL trainval set, use learning rate=0.0001.
-flags.DEFINE_float('base_learning_rate', .0007,
+flags.DEFINE_float('base_learning_rate', .0001,
                    'The base learning rate for model training.')
 
 flags.DEFINE_float('learning_rate_decay_factor', 0.1,
@@ -61,24 +61,13 @@ flags.DEFINE_float('momentum', 0.9, 'The momentum value to use')
 flags.DEFINE_integer('batch_size', 4,
                      'The number of images in each batch during training.')
 
-flags.DEFINE_integer('train_epochs', 12,
-                     help='Number of training epochs: '
-                          'For 30K iteration with batch size 4, train_epoch = 11.32 (= 30K * 4 / 10,582). '
-                          'For 30K iteration with batch size 8, train_epoch = 22.68 (= 30K * 8 / 10,582). '
-                          'For 30K iteration with batch size 10, train_epoch = 25.52 (= 30K * 10 / 10,582). '
-                          'For 30K iteration with batch size 11, train_epoch = 31.19 (= 30K * 11 / 10,582). '
-                          'For 30K iteration with batch size 15, train_epoch = 42.53 (= 30K * 15 / 10,582). '
-                          'For 30K iteration with batch size 16, train_epoch = 45.36 (= 30K * 16 / 10,582).')
-
-flags.DEFINE_integer('epochs_per_eval', 1,
-                     'The number of epochs to run between evaluation.')
 
 # For weight_decay, use 0.00004 for MobileNet-V2 or Xcpetion model variants.
 # Use 0.0001 for ResNet model variants.
 flags.DEFINE_float('weight_decay', 0.00004,
                    'The value of the weight decay for training.')
 
-flags.DEFINE_multi_integer('model_input_size', [512, 512],
+flags.DEFINE_multi_integer('model_input_size', [513, 513],
                            'Image crop size [height, width] during training.')
 
 flags.DEFINE_float('last_layer_gradient_multiplier', 1.0,
@@ -123,7 +112,7 @@ flags.DEFINE_integer('output_stride', 16,
 flags.DEFINE_string('dataset_name', 'pascal_voc2012',
                     'Name of the segmentation dataset.')
 
-flags.DEFINE_string('train_subset', 'train',
+flags.DEFINE_string('train_subset', 'trainaug',
                     'Which split of the dataset to be used for training')
 
 flags.DEFINE_string('val_subset', 'val',
@@ -135,14 +124,23 @@ flags.DEFINE_boolean('debug', False, 'Debug or not')
 
 flags.DEFINE_string('model_type', "deeplab-v3-plus", 'which model to use.')
 
-flags.DEFINE_string('pretrained_model_dir', "pretrained_model",
-                    'pretrained model dir.')
+flags.DEFINE_string('pretrained_model_dir', "",
+                    'pretrained deeplab-v3-plus model dir.')
+
+flags.DEFINE_string('pretrained_backbone_model_dir', "",
+                    'pretrained backbone(mobilnet-v2) model directory.')
+
+flags.DEFINE_string('export_dir', "", 'Directory to export model.')
+
+flags.DEFINE_string('mode', "train", '[train|eval|export].')
 
 
 def segmentation_model_fn(features,
                           labels,
                           mode,
                           params):
+    if isinstance(features, dict):
+        features = features['features']
     num_classes = params['num_classes']
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
     if params['model_type'] == 'unet':
@@ -154,11 +152,39 @@ def segmentation_model_fn(features,
                               model_input_size=params['model_input_size'],
                               output_stride=params['output_stride'],
                               weight_decay=params['weight_decay'])
+
+        pretrained_model_dir = params.get('pretrained_model_dir', '')
+        pretrained_backbone_model_dir = ''
+        if not pretrained_model_dir:
+          pretrained_backbone_model_dir = params.get(
+              'pretrained_backbone_model_dir', '')
         logits = model.forward(features,
-                               params['pretrained_model_dir'],
+                               pretrained_backbone_model_dir,
                                is_training=is_training)
+        if is_training and pretrained_model_dir:
+            print('Init from pretrained deeplab model')
+            exclude = ['global_step']
+            variables_to_restore = tf.contrib.slim.get_variables_to_restore(
+                exclude=exclude)
+            variables_map = {}
+            for v in variables_to_restore:
+                variables_map[v.name.split(':')[0]] = v
+            tf.train.init_from_checkpoint(pretrained_model_dir,
+                                          variables_map)
     pred_labels = tf.expand_dims(
-        tf.argmax(logits, axis=3, output_type=tf.int32), axis=3)
+        tf.argmax(logits, axis=3, output_type=tf.int32), axis=3, name='Output')
+
+    predictions = {
+        'pred_classes': pred_labels,
+    }
+
+    # Predict
+    if mode == tf.estimator.ModeKeys.PREDICT:
+        return tf.estimator.EstimatorSpec(
+            mode=mode,
+            predictions=predictions
+        )
+
     one_hot_labels = tf.one_hot(labels,
                                 depth=num_classes,
                                 on_value=1.0,
@@ -177,24 +203,6 @@ def segmentation_model_fn(features,
                                        num_partitions=2)[1]
     labels_flat = tf.reshape(valid_labels, [-1, ])
     pred_labels_flat = tf.reshape(valid_preds, [-1, ])
-
-    confusion_matrix = tf.confusion_matrix(
-        labels_flat,
-        pred_labels_flat,
-        num_classes=params['num_classes'])
-
-    predictions = {
-        'gt_classes': labels,
-        'pred_classes': pred_labels,
-        'confusion_matrix': confusion_matrix,
-    }
-
-    # Predict
-    if mode == tf.estimator.ModeKeys.PREDICT:
-        return tf.estimator.EstimatorSpec(
-            mode=mode,
-            predictions=predictions
-        )
 
     with tf.name_scope('loss'):
         cross_entropy = tf.losses.softmax_cross_entropy(
@@ -309,14 +317,7 @@ def segmentation_model_fn(features,
         training_hooks=train_hooks
     )
 
-
-def main(unused_argv):
-    if FLAGS.model_type not in ['unet', 'deeplab-v3-plus']:
-        raise ValueError('Only support unet and deeplab-v3+ but got ',
-                         FLAGS.model_type)
-
-    tf.logging.set_verbosity(tf.logging.INFO)
-
+def train():
     train_dataset = SegmentationDataset(
         FLAGS.dataset_name,
         FLAGS.dataset_dir,
@@ -327,21 +328,31 @@ def main(unused_argv):
         FLAGS.max_scale_factor,
         FLAGS.scale_factor_step_size,
         is_training=True)
-    val_dataset = SegmentationDataset(
+    eval_dataset = SegmentationDataset(
         FLAGS.dataset_name,
         FLAGS.dataset_dir,
         FLAGS.val_subset,
         FLAGS.model_input_size[0],
         FLAGS.model_input_size[1],
         is_training=False)
-    run_config = tf.estimator.RunConfig()
+
+    num_train_data = train_dataset.get_num_data()
+    epochs = (FLAGS.training_number_of_steps * FLAGS.batch_size
+              + num_train_data - 1) // num_train_data
+    save_checkpoints_steps = \
+            (num_train_data + FLAGS.batch_size - 1) // FLAGS.batch_size
+    run_config = tf.estimator.RunConfig(
+        save_checkpoints_steps=save_checkpoints_steps
+    )
     model = tf.estimator.Estimator(
         model_fn=segmentation_model_fn,
-        model_dir=FLAGS.train_logdir,
+        model_dir=FLAGS.logdir,
         config=run_config,
         params={
             'model_type': FLAGS.model_type,
+            'logdir': FLAGS.logdir,
             'pretrained_model_dir': FLAGS.pretrained_model_dir,
+            'pretrained_backbone_model_dir': FLAGS.pretrained_backbone_model_dir,
             'num_classes': train_dataset.get_num_classes(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
@@ -349,7 +360,7 @@ def main(unused_argv):
             'batch_size': FLAGS.batch_size,
             'learning_policy': FLAGS.learning_policy,
             'base_learning_rate': FLAGS.base_learning_rate,
-            'learning_rate_decay_step': 10582 // FLAGS.batch_size,
+            'learning_rate_decay_step': FLAGS.learning_rate_decay_step,
             'learning_rate_decay_factor': FLAGS.learning_rate_decay_factor,
             'training_number_of_steps': FLAGS.training_number_of_steps,
             'learning_power': FLAGS.learning_power,
@@ -358,33 +369,105 @@ def main(unused_argv):
             'momentum': FLAGS.momentum,
         }
     )
+    train_spec = tf.estimator.TrainSpec(
+        input_fn=lambda: train_dataset.make_batch(FLAGS.batch_size,
+                                                  epochs),
+        max_steps=FLAGS.training_number_of_steps)
+    eval_spec = tf.estimator.EvalSpec(
+        input_fn=lambda: eval_dataset.make_batch(1),
+        steps=eval_dataset.get_num_data())
+    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
 
-    for _ in range(FLAGS.train_epochs // FLAGS.epochs_per_eval):
-        eval_hooks = None
 
-        if FLAGS.debug:
-            debug_hook = tf_debug.LocalCLIDebugHook()
-            eval_hooks = [debug_hook]
+def evaluate():
+    eval_dataset = SegmentationDataset(
+        FLAGS.dataset_name,
+        FLAGS.dataset_dir,
+        FLAGS.val_subset,
+        FLAGS.model_input_size[0],
+        FLAGS.model_input_size[1],
+        is_training=False)
 
-        print("Start training.")
-        model.train(
-            input_fn=lambda: train_dataset.make_batch(FLAGS.batch_size,
-                                                      FLAGS.epochs_per_eval),
-            # steps=1 # For debug
-        )
+    run_config = tf.estimator.RunConfig()
+    model = tf.estimator.Estimator(
+        model_fn=segmentation_model_fn,
+        model_dir=FLAGS.logdir,
+        config=run_config,
+        params={
+            'model_type': FLAGS.model_type,
+            'logdir': FLAGS.logdir,
+            'num_classes': eval_dataset.get_num_classes(),
+            'model_input_size': FLAGS.model_input_size,
+            'output_stride': FLAGS.output_stride,
+            'weight_decay': FLAGS.weight_decay,
+        }
+    )
 
-        print("Start evaluation.")
-        # Evaluate the model and print results
-        eval_results = model.evaluate(
-            # Batch size must be 1 for testing because the images' size differs
-            input_fn=lambda: val_dataset.make_batch(FLAGS.batch_size),
-            hooks=eval_hooks,
-            # steps=1  # For debug
-        )
-        print(eval_results)
+    # Evaluate the model and print results
+    eval_results = model.evaluate(
+        # Batch size must be 1 for testing because the images' size differs
+        input_fn=lambda: eval_dataset.make_batch(1),
+        steps=eval_dataset.get_num_data())
+    print(eval_results)
+
+
+def export_model():
+    eval_dataset = SegmentationDataset(
+        FLAGS.dataset_name,
+        FLAGS.dataset_dir,
+        FLAGS.val_subset,
+        FLAGS.model_input_size[0],
+        FLAGS.model_input_size[1],
+        is_training=False)
+
+    run_config = tf.estimator.RunConfig()
+    estimator = tf.estimator.Estimator(
+        model_fn=segmentation_model_fn,
+        model_dir=FLAGS.logdir,
+        config=run_config,
+        params={
+            'model_type': FLAGS.model_type,
+            'logdir': FLAGS.logdir,
+            'num_classes': eval_dataset.get_num_classes(),
+            'model_input_size': FLAGS.model_input_size,
+            'output_stride': FLAGS.output_stride,
+            'weight_decay': FLAGS.weight_decay,
+        }
+    )
+    # Export the model
+    def make_serving_input_receiver_fn():
+        inputs = {'features':
+            tf.placeholder(shape=[None, FLAGS.model_input_size[0],
+                                  FLAGS.model_input_size[1], 3],
+                           dtype=tf.float32,
+                           name='Input')}
+        return tf.estimator.export.build_raw_serving_input_receiver_fn(inputs)
+
+    print('Export model to %s' % FLAGS.export_dir)
+    tf.gfile.DeleteRecursively(FLAGS.export_dir)
+    estimator.export_savedmodel(
+        export_dir_base = FLAGS.export_dir,
+        serving_input_receiver_fn = make_serving_input_receiver_fn())
+
+
+def main(unused_argv):
+    if FLAGS.model_type not in ['unet', 'deeplab-v3-plus']:
+        raise ValueError('Only support unet and deeplab-v3+ but got ',
+                         FLAGS.model_type)
+
+    tf.logging.set_verbosity(tf.logging.INFO)
+
+    if FLAGS.mode == 'train':
+      train()
+    elif FLAGS.mode == 'eval':
+      evaluate()
+    elif FLAGS.mode == 'export':
+      export_model()
+    else:
+        raise ValueError('Only support train and eval but got ',
+                         FLAGS.model_type)
 
 
 if __name__ == '__main__':
-    flags.mark_flag_as_required('train_logdir')
     flags.mark_flag_as_required('dataset_dir')
     tf.app.run()

@@ -33,7 +33,7 @@ def create_readable_names_for_imagenet_labels():
 
     """
 
-    base_url = 'https://raw.githubusercontent.com/tensorflow/models/master/research/inception/inception/data/'  # noqa
+    base_url = 'http://cnbj1-fds.api.xiaomi.net/ml-datasets/imagenet/'  # noqa
     synset_url = '{}/imagenet_lsvrc_2015_synsets.txt'.format(base_url)
     synset_to_human_url = '{}/imagenet_metadata.txt'.format(base_url)
 
@@ -91,8 +91,8 @@ def main(unused_argv):
     for v in variables_to_restore:
         # print(v.name)
         old_name = v.name.split(':')[0]
-        # old_name = old_name.replace('conv2d/kernel', 'weights')
-        # old_name = old_name.replace('conv2d/bias', 'biases')
+        old_name = old_name.replace('conv2d/kernel', 'weights')
+        old_name = old_name.replace('conv2d/bias', 'biases')
         variables_map[old_name] = v
     tf.train.init_from_checkpoint(FLAGS.pretrained_model_dir,
                                   variables_map)

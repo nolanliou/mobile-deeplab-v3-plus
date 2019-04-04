@@ -120,7 +120,8 @@ class MobilenetV2(object):
                 dilation_rate=dilation_rate,
                 use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                name='conv2d')
             net = conv2d(net)
             tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:

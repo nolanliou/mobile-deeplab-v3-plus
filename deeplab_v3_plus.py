@@ -54,7 +54,7 @@ class DeeplabV3Plus(object):
                 is_training=True,
                 scope=None):
         net = input_tensor
-        with tf.variable_scope(scope, default_name="conv"):
+        with tf.variable_scope(scope, default_name="Conv"):
             if stddev > 0:
                 kernel_initializer =\
                     tf.truncated_normal_initializer(stddev=stddev)
@@ -69,15 +69,15 @@ class DeeplabV3Plus(object):
                 dilation_rate=dilation_rate,
                 use_bias=use_bias,
                 kernel_initializer=kernel_initializer,
-                kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
+                kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
+                name='conv2d')
             net = conv2d(net)
             tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
-                # there is no trainable of tf.keras.layers.BatchNormalization
-                # in TF-1.8
                 net = tf.keras.layers.BatchNormalization(
                     momentum=bn_momentum,
-                    epsilon=bn_epsilon)(net, training=is_training)
+                    epsilon=bn_epsilon,
+                    name='BatchNorm')(net, training=is_training)
             if activation_fn:
                 net = activation_fn(net)
                 tf.summary.histogram('Activation', net)
@@ -170,6 +170,7 @@ class DeeplabV3Plus(object):
                 num_outputs=depth,
                 kernel_size=1,
                 weight_decay=weight_decay,
+                is_training=is_training,
                 scope='image_pooling')
             image_feature = layers.resize_bilinear(
                 image_feature,
@@ -183,6 +184,7 @@ class DeeplabV3Plus(object):
             num_outputs=depth,
             kernel_size=1,
             weight_decay=weight_decay,
+            is_training=is_training,
             scope=ASPP_SCOPE + str(0)))
 
         if self.atrous_rates:
@@ -197,6 +199,7 @@ class DeeplabV3Plus(object):
                         padding='SAME',
                         dilation_rate=rate,
                         weight_decay=weight_decay,
+                        is_training=is_training,
                         scope=scope)
                 else:
                     aspp_features = self._conv2d(
@@ -205,6 +208,7 @@ class DeeplabV3Plus(object):
                         kernel_size=3,
                         dilation_rate=rate,
                         weight_decay=weight_decay,
+                        is_training=is_training,
                         scope=scope)
                 branch_logits.append(aspp_features)
         # Merge branch logits.
@@ -214,6 +218,7 @@ class DeeplabV3Plus(object):
             num_outputs=depth,
             kernel_size=1,
             weight_decay=weight_decay,
+            is_training=is_training,
             scope=CONCAT_PROJECTION_SCOPE)
         if is_training:
             with tf.variable_scope(CONCAT_PROJECTION_SCOPE + '_dropout'):
@@ -223,7 +228,7 @@ class DeeplabV3Plus(object):
 
     def encode(self,
                input_tensor,
-               pretrained_model_dir,
+               pretrained_backbone_model_dir,
                is_training=True):
         # extract features
         mobilenet_model = MobilenetV2(
@@ -236,9 +241,8 @@ class DeeplabV3Plus(object):
             _MOBILENET_V2_FINAL_ENDPOINT,
             is_training=is_training)
         
-        base_architecture = 'MobilenetV2'
-        
-        if is_training:
+        if pretrained_backbone_model_dir:
+            base_architecture = 'MobilenetV2'
             exclude = [base_architecture + '/Logits', 'global_step']
             variables_to_restore = tf.contrib.slim.get_variables_to_restore(
                 exclude=exclude)
@@ -259,7 +263,7 @@ class DeeplabV3Plus(object):
 
     def forward(self,
                 input_tensor,
-                pretrained_model_dir,
+                pretrained_backbone_model_dir=None,
                 is_training=True):
         input_height = (
             self.model_input_size[0]
@@ -269,22 +273,22 @@ class DeeplabV3Plus(object):
             if self.model_input_size else tf.shape(input_tensor)[2])
 
         features, endpoints = self.encode(input_tensor,
-                                          pretrained_model_dir,
+                                          pretrained_backbone_model_dir,
                                           is_training)
 
         # if self.decoder_output_stride is not None:
         #     features = self.decode(features, endpoints)
-
-        logits = self._conv2d(features,
-                              num_outputs=self.num_classes,
-                              kernel_size=1,
-                              stddev=0.01,
-                              weight_decay=self.weight_decay,
-                              use_bias=True,
-                              use_bn=False,
-                              activation_fn=None,
-                              is_training=is_training,
-                              scope=LOGITS_SCOPE_NAME)
+        with tf.variable_scope(LOGITS_SCOPE_NAME):
+            logits = self._conv2d(features,
+                                  num_outputs=self.num_classes,
+                                  kernel_size=1,
+                                  stddev=0.01,
+                                  weight_decay=self.weight_decay,
+                                  use_bias=True,
+                                  use_bn=False,
+                                  activation_fn=None,
+                                  is_training=is_training,
+                                  scope='semantic')
 
         # Resize the logits to have the same dimension before merging.
         output_logit = tf.image.resize_bilinear(
