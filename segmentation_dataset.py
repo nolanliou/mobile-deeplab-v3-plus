@@ -102,6 +102,9 @@ class SegmentationDataset(object):
     def get_num_data(self):
         return _DATASETS_INFORMATION[self.dataset_name].subset_to_sizes[self.subset]
 
+    def get_ignore_label(self):
+        return _DATASETS_INFORMATION[self.dataset_name].ignore_label
+
     def _get_filenames(self):
         if self.dataset_name not in _DATASETS_INFORMATION:
             raise ValueError('The specified dataset is not supported yet.')
@@ -168,7 +171,8 @@ class SegmentationDataset(object):
             self.scale_factor_step_size,
             _DATASETS_INFORMATION[self.dataset_name].ignore_label,
             self.is_training)
-        # image/label : [model_input_height, model_input_width, 3]
+        # image: [model_input_height, model_input_width, 3]
+        # label: [model_input_height, model_input_width, 1]
         return image, label
 
     def make_batch(self, batch_size, num_epochs=1):

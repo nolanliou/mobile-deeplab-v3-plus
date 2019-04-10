@@ -36,6 +36,7 @@ PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 python run.py --dataset_dir="${PASCAL_DATASET}"\
   --logdir="${TRAIN_LOGDIR}" \
   --model_type="${MODEL_TYPE}" \
+  --base_learning_rate=0.007 \
   --pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
 
 #  --pretrained_model_dir="${PRETRAINED_MODEL_DIR}" \

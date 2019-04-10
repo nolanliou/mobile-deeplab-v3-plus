@@ -125,9 +125,12 @@ class MobilenetV2(object):
             net = conv2d(net)
             tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
-                net = tf.keras.layers.BatchNormalization(
+                # keras layers' update op is not in global update_op collections
+                net = tf.layers.batch_normalization(
+                    net,
                     momentum=bn_momentum,
-                    name='BatchNorm')(net, training=is_training)
+                    training=is_training,
+                    name='BatchNorm')
             if activation_fn:
                 net = activation_fn(net)
                 tf.summary.histogram('Activation', net)

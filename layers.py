@@ -36,12 +36,12 @@ def depthwise_conv(input_tensor,
             padding,
             rate=[dilation_rate, dilation_rate])
         if not use_bias and use_bn:
-            # there is no trainable of tf.keras.layers.BatchNormalization
-            # in TF-1.8
-            net = tf.keras.layers.BatchNormalization(
+            net = tf.layers.batch_normalization(
+                net,
                 momentum=bn_momentum,
                 epsilon=bn_epsilon,
-                name='BatchNorm')(net, training=is_training)
+                training=is_training,
+                name='BatchNorm')
         if activation_fn:
             net = activation_fn(net)
         return net

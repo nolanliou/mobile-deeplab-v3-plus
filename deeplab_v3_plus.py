@@ -74,10 +74,12 @@ class DeeplabV3Plus(object):
             net = conv2d(net)
             tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
-                net = tf.keras.layers.BatchNormalization(
+                net = tf.layers.batch_normalization(
+                    net,
                     momentum=bn_momentum,
                     epsilon=bn_epsilon,
-                    name='BatchNorm')(net, training=is_training)
+                    training=is_training,
+                    name='BatchNorm')
             if activation_fn:
                 net = activation_fn(net)
                 tf.summary.histogram('Activation', net)
@@ -241,12 +243,13 @@ class DeeplabV3Plus(object):
             _MOBILENET_V2_FINAL_ENDPOINT,
             is_training=is_training)
         
-        if pretrained_backbone_model_dir:
+        if pretrained_backbone_model_dir and is_training:
             base_architecture = 'MobilenetV2'
             exclude = [base_architecture + '/Logits', 'global_step']
             variables_to_restore = tf.contrib.slim.get_variables_to_restore(
                 exclude=exclude)
-            tf.train.init_from_checkpoint(pretrained_model_dir,
+            tf.logging.info('init from %s model' % base_architecture)
+            tf.train.init_from_checkpoint(pretrained_backbone_model_dir,
                                           {v.name.split(':')[0]: v for v in
                                            variables_to_restore})
 

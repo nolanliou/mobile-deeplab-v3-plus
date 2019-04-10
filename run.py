@@ -24,13 +24,6 @@ flags.DEFINE_integer('log_steps', 10,
 flags.DEFINE_integer('save_interval_secs', 1200,
                      'How often, in seconds, we save the model to disk.')
 
-flags.DEFINE_integer('save_summaries_secs', 600,
-                     'How often, in seconds, we compute the summaries.')
-
-flags.DEFINE_boolean('save_summaries_images', False,
-                     'Save sample inputs, labels, and semantic predictions as '
-                     'images to summary.')
-
 # Settings for training strategy.
 
 flags.DEFINE_enum('learning_policy', 'poly', ['poly', 'step'],
@@ -58,7 +51,7 @@ flags.DEFINE_float('momentum', 0.9, 'The momentum value to use')
 # When fine_tune_batch_norm=True, use at least batch size larger than 12
 # (batch size more than 16 is better). Otherwise, one could use smaller batch
 # size and set fine_tune_batch_norm=False.
-flags.DEFINE_integer('batch_size', 4,
+flags.DEFINE_integer('batch_size', 16,
                      'The number of images in each batch during training.')
 
 
@@ -78,12 +71,6 @@ flags.DEFINE_boolean('upsample_logits', True,
                      'Upsample logits during training.')
 
 # Set to False if one does not want to re-use the trained classifier weights.
-flags.DEFINE_boolean('initialize_last_layer', True,
-                     'Initialize the last layer.')
-
-flags.DEFINE_boolean('last_layers_contain_logits_only', False,
-                     'Only consider logits as last layers or not.')
-
 flags.DEFINE_integer('slow_start_step', 0,
                      'Training model with small learning rate for few steps.')
 
@@ -155,9 +142,9 @@ def segmentation_model_fn(features,
 
         pretrained_model_dir = params.get('pretrained_model_dir', '')
         pretrained_backbone_model_dir = ''
-        if not pretrained_model_dir:
-          pretrained_backbone_model_dir = params.get(
-              'pretrained_backbone_model_dir', '')
+        if not pretrained_model_dir and is_training:
+            pretrained_backbone_model_dir = params.get(
+                'pretrained_backbone_model_dir', '')
         logits = model.forward(features,
                                pretrained_backbone_model_dir,
                                is_training=is_training)
@@ -174,39 +161,42 @@ def segmentation_model_fn(features,
     pred_labels = tf.expand_dims(
         tf.argmax(logits, axis=3, output_type=tf.int32), axis=3, name='Output')
 
-    predictions = {
-        'pred_classes': pred_labels,
-    }
-
     # Predict
     if mode == tf.estimator.ModeKeys.PREDICT:
+        predictions = {
+            'pred_classes': pred_labels,
+        }
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=predictions
         )
 
-    one_hot_labels = tf.one_hot(labels,
-                                depth=num_classes,
-                                on_value=1.0,
-                                off_value=0.0,
-                                axis=-1)
+    one_hot_labels = tf.one_hot(labels, depth=num_classes,
+        on_value=1.0, off_value=0.0, axis=-1)
 
     logits_by_num_classes = tf.reshape(logits, [-1, num_classes])
     labels_by_num_classes = tf.reshape(one_hot_labels, [-1, num_classes])
+    ignore_label = params['ignore_label']
 
-    labels_flat = tf.reshape(labels, [-1, ])
+    labels_flat = tf.reshape(labels, [-1])
+    not_ignore_mask = tf.to_float(
+        tf.not_equal(labels_flat, ignore_label)) * 1.0
+
     valid_indices = tf.to_int32(labels_flat <= (num_classes - 1))
+
     valid_labels = tf.dynamic_partition(labels_flat, valid_indices,
                                         num_partitions=2)[1]
-    valid_preds = tf.dynamic_partition(tf.reshape(pred_labels, [-1, ]),
+    valid_preds = tf.dynamic_partition(tf.reshape(pred_labels, [-1]),
                                        valid_indices,
                                        num_partitions=2)[1]
-    labels_flat = tf.reshape(valid_labels, [-1, ])
-    pred_labels_flat = tf.reshape(valid_preds, [-1, ])
+    labels_flat = tf.reshape(valid_labels, [-1])
+    pred_labels_flat = tf.reshape(valid_preds, [-1])
 
     with tf.name_scope('loss'):
         cross_entropy = tf.losses.softmax_cross_entropy(
-            logits=logits_by_num_classes, onehot_labels=labels_by_num_classes)
+            onehot_labels=labels_by_num_classes,
+            logits=logits_by_num_classes,
+            weights=not_ignore_mask)
 
         # Create a tensor named cross_entropy for logging purposes.
         tf.identity(cross_entropy, name='loss')
@@ -216,7 +206,7 @@ def segmentation_model_fn(features,
         accuracy = tf.metrics.accuracy(
             labels_flat, pred_labels_flat)
         mean_iou = tf.metrics.mean_iou(labels_flat, pred_labels_flat,
-                                       params['num_classes'])
+                                       num_classes)
     metrics = {'pixel_accuracy': accuracy, 'mean_iou': mean_iou}
 
     # evaluation
@@ -344,6 +334,12 @@ def train():
     run_config = tf.estimator.RunConfig(
         save_checkpoints_steps=save_checkpoints_steps
     )
+    pretrained_model_dir = FLAGS.pretrained_model_dir
+    pretrained_backbone_model_dir = FLAGS.pretrained_backbone_model_dir
+    if tf.train.latest_checkpoint(FLAGS.logdir):
+        tf.logging.info('Ignore initialization; other checkpoint exists')
+        pretrained_model_dir = ''
+        pretrained_backbone_model_dir = ''
     model = tf.estimator.Estimator(
         model_fn=segmentation_model_fn,
         model_dir=FLAGS.logdir,
@@ -351,9 +347,10 @@ def train():
         params={
             'model_type': FLAGS.model_type,
             'logdir': FLAGS.logdir,
-            'pretrained_model_dir': FLAGS.pretrained_model_dir,
-            'pretrained_backbone_model_dir': FLAGS.pretrained_backbone_model_dir,
+            'pretrained_model_dir': pretrained_model_dir,
+            'pretrained_backbone_model_dir': pretrained_backbone_model_dir,
             'num_classes': train_dataset.get_num_classes(),
+            'ignore_label': train_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
             'weight_decay': FLAGS.weight_decay,
@@ -397,6 +394,7 @@ def evaluate():
             'model_type': FLAGS.model_type,
             'logdir': FLAGS.logdir,
             'num_classes': eval_dataset.get_num_classes(),
+            'ignore_label': eval_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
             'weight_decay': FLAGS.weight_decay,
@@ -429,6 +427,7 @@ def export_model():
             'model_type': FLAGS.model_type,
             'logdir': FLAGS.logdir,
             'num_classes': eval_dataset.get_num_classes(),
+            'ignore_label': eval_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
             'weight_decay': FLAGS.weight_decay,
@@ -445,6 +444,7 @@ def export_model():
 
     print('Export model to %s' % FLAGS.export_dir)
     tf.gfile.DeleteRecursively(FLAGS.export_dir)
+    tf.gfile.MakeDirs(FLAGS.export_dir)
     estimator.export_savedmodel(
         export_dir_base = FLAGS.export_dir,
         serving_input_receiver_fn = make_serving_input_receiver_fn())
