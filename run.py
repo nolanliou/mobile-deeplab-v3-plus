@@ -1,5 +1,6 @@
+import time
+import numpy as np
 import tensorflow as tf
-from tensorflow.python import debug as tf_debug
 
 # tf.enable_eager_execution()
 
@@ -54,6 +55,8 @@ flags.DEFINE_float('momentum', 0.9, 'The momentum value to use')
 flags.DEFINE_integer('batch_size', 16,
                      'The number of images in each batch during training.')
 
+flags.DEFINE_integer('num_clones', 1,
+                     'The number of clones for multiple GPU training.')
 
 # For weight_decay, use 0.00004 for MobileNet-V2 or Xcpetion model variants.
 # Use 0.0001 for ResNet model variants.
@@ -122,6 +125,21 @@ flags.DEFINE_string('export_dir', "", 'Directory to export model.')
 flags.DEFINE_string('mode', "train", '[train|eval|export].')
 
 
+class TimeHistory(tf.train.SessionRunHook):
+    def __init__(self):
+        self.times = []
+        self.iter_time_start = None
+
+    def begin(self):
+        self.times = []
+
+    def before_run(self, run_context):
+        self.iter_time_start = time.time()
+
+    def after_run(self, run_context, run_values):
+        self.times.append(time.time() - self.iter_time_start)
+
+
 def segmentation_model_fn(features,
                           labels,
                           mode,
@@ -172,7 +190,7 @@ def segmentation_model_fn(features,
         )
 
     one_hot_labels = tf.one_hot(labels, depth=num_classes,
-        on_value=1.0, off_value=0.0, axis=-1)
+                                on_value=1.0, off_value=0.0, axis=-1)
 
     logits_by_num_classes = tf.reshape(logits, [-1, num_classes])
     labels_by_num_classes = tf.reshape(one_hot_labels, [-1, num_classes])
@@ -307,6 +325,7 @@ def segmentation_model_fn(features,
         training_hooks=train_hooks
     )
 
+
 def train():
     train_dataset = SegmentationDataset(
         FLAGS.dataset_name,
@@ -330,9 +349,11 @@ def train():
     epochs = (FLAGS.training_number_of_steps * FLAGS.batch_size
               + num_train_data - 1) // num_train_data
     save_checkpoints_steps = \
-            (num_train_data + FLAGS.batch_size - 1) // FLAGS.batch_size
+        (num_train_data + FLAGS.batch_size - 1) // FLAGS.batch_size
+    strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=FLAGS.num_clones)
     run_config = tf.estimator.RunConfig(
-        save_checkpoints_steps=save_checkpoints_steps
+        save_checkpoints_steps=save_checkpoints_steps,
+        train_distribute=strategy,
     )
     pretrained_model_dir = FLAGS.pretrained_model_dir
     pretrained_backbone_model_dir = FLAGS.pretrained_backbone_model_dir
@@ -366,14 +387,25 @@ def train():
             'momentum': FLAGS.momentum,
         }
     )
+    time_hist = TimeHistory()
     train_spec = tf.estimator.TrainSpec(
         input_fn=lambda: train_dataset.make_batch(FLAGS.batch_size,
-                                                  epochs),
-        max_steps=FLAGS.training_number_of_steps)
+                                                  epochs,
+                                                  FLAGS.num_clones),
+        max_steps=FLAGS.training_number_of_steps,
+        hooks=[time_hist])
     eval_spec = tf.estimator.EvalSpec(
         input_fn=lambda: eval_dataset.make_batch(1),
         steps=eval_dataset.get_num_data())
     tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+
+    total_time = sum(time_hist.times)
+    print("total time with %d GPUs: %f seconds" % (FLAGS.num_clones,
+                                                   total_time))
+
+    avg_time_per_batch = np.mean(time_hist.times)
+    print("%f images/second with %d GPUs" %
+          (FLAGS.batch_size / avg_time_per_batch, FLAGS.num_clones))
 
 
 def evaluate():
@@ -433,6 +465,7 @@ def export_model():
             'weight_decay': FLAGS.weight_decay,
         }
     )
+
     # Export the model
     def make_serving_input_receiver_fn():
         inputs = {'features':
@@ -458,11 +491,11 @@ def main(unused_argv):
     tf.logging.set_verbosity(tf.logging.INFO)
 
     if FLAGS.mode == 'train':
-      train()
+        train()
     elif FLAGS.mode == 'eval':
-      evaluate()
+        evaluate()
     elif FLAGS.mode == 'export':
-      export_model()
+        export_model()
     else:
         raise ValueError('Only support train and eval but got ',
                          FLAGS.model_type)

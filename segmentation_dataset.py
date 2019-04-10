@@ -175,7 +175,7 @@ class SegmentationDataset(object):
         # label: [model_input_height, model_input_width, 1]
         return image, label
 
-    def make_batch(self, batch_size, num_epochs=1):
+    def make_batch(self, batch_size, num_epochs=1, num_clones=1):
         filenames = self._get_filenames()
         dataset = tf.data.TFRecordDataset(filenames).repeat(num_epochs)
 
@@ -191,9 +191,11 @@ class SegmentationDataset(object):
             dataset = dataset.shuffle(
                 buffer_size=min_queue_examples + 3 * batch_size)
 
+        # synchronized training on multiple GPU
+        clone_batch_size = batch_size // num_clones
         # batch
         dataset = dataset.prefetch(batch_size)
-        dataset = dataset.batch(batch_size)
+        dataset = dataset.batch(clone_batch_size)
         iterator = dataset.make_one_shot_iterator()
         return iterator.get_next()
 
