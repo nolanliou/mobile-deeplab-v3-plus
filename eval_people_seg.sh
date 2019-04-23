@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-export CUDA_VISIBLE_DEVICES=''
+export CUDA_VISIBLE_DEVICES=3
 # Update PYTHONPATH.
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
@@ -17,17 +17,34 @@ WORK_DIR="${CURRENT_DIR}"
 
 # Go to datasets folder and download PASCAL VOC 2012 segmentation dataset.
 DATASET_DIR="datasets"
+cd "${WORK_DIR}/${DATASET_DIR}"
+#sh download_and_convert_voc2012.sh
+
+# Go back to original directory.
+cd "${CURRENT_DIR}"
 
 # Set up the working directories.
-PASCAL_FOLDER="pascal_voc2012"
+PS_FOLDER="people_segmentation"
 EXP_FOLDER="exp"
-TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/train"
-EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/export"
+TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/train"
+
+PS_DATASET="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/tfrecord"
+
+echo 'Evaluation'
+python run.py --dataset_dir="${PS_DATASET}"\
+  --logdir="${TRAIN_LOGDIR}" \
+  --dataset_name="people_segmentation" \
+  --model_type="${MODEL_TYPE}" \
+  --mode=eval
+
+echo 'Export model'
+EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/export"
 rm -rf "${EXPORT_DIR}"
 mkdir -p "${EXPORT_DIR}"
 
-python run.py --dataset_dir="${PASCAL_DATASET}"\
+python run.py --dataset_dir="${PS_DATASET}"\
   --logdir="${TRAIN_LOGDIR}" \
+  --dataset_name="people_segmentation" \
   --model_type="${MODEL_TYPE}" \
   --mode=export \
   --export_dir="${EXPORT_DIR}"
@@ -36,6 +53,3 @@ python run.py --dataset_dir="${PASCAL_DATASET}"\
 python freeze.py --model_dir="${EXPORT_DIR}" \
   --output_node_names=Output \
   --output_dir="${EXPORT_DIR}"
-
-
-

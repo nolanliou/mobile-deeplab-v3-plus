@@ -14,29 +14,28 @@
 # limitations under the License.
 # ==============================================================================
 #
-# Script to download and preprocess the PASCAL VOC 2012 dataset.
+# Script to download and preprocess the people segmentation dataset.
 #
 # Usage:
-#   bash ./download_and_convert_voc2012.sh
+#   bash ./download_and_convert_people_segmentation.sh
 #
 # The folder structure is assumed to be:
 #  + datasets
 #     - build_data.py
-#     - build_voc2012_data.py
 #     - download_and_convert_voc2012.sh
 #     - remove_gt_colormap.py
-#     + pascal_voc_seg
-#       + VOCdevkit
-#         + VOC2012
-#           + JPEGImages
-#           + SegmentationClass
+#     + people_segmentation
+#       + images
+#       + masks
 #
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+export CUDA_VISIBLE_DEVICES=0
+
 CURRENT_DIR=$(pwd)
-WORK_DIR="./pascal_voc2012"
+WORK_DIR="./people_segmentation"
 mkdir -p "${WORK_DIR}"
 cd "${WORK_DIR}"
 
@@ -54,38 +53,32 @@ download_and_uncompress() {
 }
 
 # Download the images.
-BASE_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012/"
-FILENAME="VOCtrainval_11-May-2012.tar"
+BASE_URL=""
+FILENAME="people_segmentation.tar.gz"
 
-#download_and_uncompress "${BASE_URL}" "${FILENAME}"
+download_and_uncompress "${BASE_URL}" "${FILENAME}"
 
 cd "${CURRENT_DIR}"
 
-# Root path for PASCAL VOC 2012 dataset.
-PASCAL_ROOT="${WORK_DIR}/VOCdevkit/VOC2012"
+# Root path for people segmentation dataset.
+DS_ROOT="${WORK_DIR}"
 
 # Remove the colormap in the ground truth annotations.
-# 把图片从P(彩色图)转成了L(黑白图)
-SEG_FOLDER="${PASCAL_ROOT}/SegmentationClass"
-SEMANTIC_SEG_FOLDER="${PASCAL_ROOT}/SegmentationClassRaw"
-
-echo "Removing the color map in ground truth annotations..."
-python ./remove_gt_colormap.py \
-  --original_gt_folder="${SEG_FOLDER}" \
-  --output_dir="${SEMANTIC_SEG_FOLDER}"
+SEG_FOLDER="${DS_ROOT}/masks"
 
 # Build TFRecords of the dataset.
 # First, create output directory for storing TFRecords.
 OUTPUT_DIR="${WORK_DIR}/tfrecord"
 mkdir -p "${OUTPUT_DIR}"
 
-IMAGE_FOLDER="${PASCAL_ROOT}/JPEGImages"
-LIST_FOLDER="${PASCAL_ROOT}/ImageSets/Segmentation"
+IMAGE_FOLDER="${DS_ROOT}/images"
+LIST_FOLDER="${DS_ROOT}/segmentation"
 
-echo "Converting PASCAL VOC 2012 dataset..."
-python ./build_voc2012_data.py \
+echo "Converting people segmentation dataset..."
+python ./build_people_segmentation.py \
   --image_folder="${IMAGE_FOLDER}" \
-  --semantic_segmentation_folder="${SEMANTIC_SEG_FOLDER}" \
+  --semantic_segmentation_folder="${SEG_FOLDER}" \
   --list_folder="${LIST_FOLDER}" \
   --image_format="jpg" \
+  --label_format="png" \
   --output_dir="${OUTPUT_DIR}"

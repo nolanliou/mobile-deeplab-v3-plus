@@ -103,6 +103,13 @@ def preprocess_image_and_label(image,
           processed_image, label, scale)
         processed_image.set_shape([None, None, 3])
 
+    if not is_training:
+        processed_image, label = utils.resize_to_target(
+            processed_image,
+            label,
+            model_input_height,
+            model_input_width)
+
     # Pad image and label to have
     # dimensions >= [model_input_height, model_input_width]
     image_shape = tf.shape(processed_image)
@@ -129,6 +136,7 @@ def preprocess_image_and_label(image,
             [processed_image, label],
             model_input_height,
             model_input_width)
+        
 
     processed_image.set_shape([model_input_height, model_input_width, 3])
 

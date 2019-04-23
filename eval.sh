@@ -32,6 +32,24 @@ mkdir -p "${TRAIN_LOGDIR}"
 PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
 
 python run.py --dataset_dir="${PASCAL_DATASET}"\
+  --dataset_name="pascal_voc2012" \
   --logdir="${TRAIN_LOGDIR}" \
   --model_type="${MODEL_TYPE}" \
   --mode=eval
+
+# Export model
+EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/export"
+rm -rf "${EXPORT_DIR}"
+mkdir -p "${EXPORT_DIR}"
+
+python run.py --dataset_dir="${PASCAL_DATASET}"\
+  --dataset_name="pascal_voc2012" \
+  --logdir="${TRAIN_LOGDIR}" \
+  --model_type="${MODEL_TYPE}" \
+  --mode=export \
+  --export_dir="${EXPORT_DIR}"
+
+# freeze
+python freeze.py --model_dir="${EXPORT_DIR}" \
+  --output_node_names=Output \
+  --output_dir="${EXPORT_DIR}"

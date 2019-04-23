@@ -60,11 +60,22 @@ _ADE20K_INFORMATION = DatasetDescriptor(
     ignore_label=0,
 )
 
+_PEOPLE_SEGMENTATION_INFORMATION = DatasetDescriptor(
+    subset_to_sizes={
+        'train': 4945,
+        'val': 550,
+        'trainval': 5495,
+    },
+    num_classes=2,
+    ignore_label=255,
+)
+
 
 _DATASETS_INFORMATION = {
     'cityscapes': _CITYSCAPES_INFORMATION,
     'pascal_voc2012': _PASCAL_VOC_2012_INFORMATION,
     'ade20k': _ADE20K_INFORMATION,
+    'people_segmentation': _PEOPLE_SEGMENTATION_INFORMATION,
 }
 
 # Default file pattern of TFRecord of TensorFlow Example.
@@ -105,7 +116,7 @@ class SegmentationDataset(object):
     def get_ignore_label(self):
         return _DATASETS_INFORMATION[self.dataset_name].ignore_label
 
-    def _get_filenames(self):
+    def _get_file_patten(self):
         if self.dataset_name not in _DATASETS_INFORMATION:
             raise ValueError('The specified dataset is not supported yet.')
 
@@ -124,7 +135,7 @@ class SegmentationDataset(object):
             data_files = [data_source]
         if not data_files:
             raise ValueError('No data files found in %s' % (data_source,))
-        return data_files
+        return data_source
 
     def parser(self, serialized_example):
         """Parses a single tf.Example into image and label tensors."""
@@ -176,10 +187,10 @@ class SegmentationDataset(object):
         return image, label
 
     def make_batch(self, batch_size, num_epochs=1, num_clones=1):
-        filenames = self._get_filenames()
-        dataset = tf.data.TFRecordDataset(filenames).repeat(num_epochs)
-
-        dataset = dataset.map(self.parser, num_parallel_calls=batch_size)
+        files = tf.data.Dataset.list_files(self._get_file_patten())
+        dataset = files.apply(tf.data.experimental.parallel_interleave(
+            lambda filename: tf.data.TFRecordDataset(filename),
+            cycle_length=8))
 
         # Potentially shuffle records.
         if self.is_training:
@@ -188,16 +199,20 @@ class SegmentationDataset(object):
                 subset_to_sizes[self.subset] * 0.4)
             # Ensure that the capacity is sufficiently large to provide
             # good random shuffling.
-            dataset = dataset.shuffle(
-                buffer_size=min_queue_examples + 3 * batch_size)
+            dataset = dataset.apply(
+                tf.data.experimental.shuffle_and_repeat(
+                    buffer_size=min_queue_examples + 3 * batch_size,
+                    count=num_epochs))
 
-        # synchronized training on multiple GPU
-        clone_batch_size = batch_size // num_clones
-        # batch
-        dataset = dataset.prefetch(batch_size)
-        dataset = dataset.batch(clone_batch_size)
-        iterator = dataset.make_one_shot_iterator()
-        return iterator.get_next()
+        dataset = dataset.apply(tf.data.experimental.map_and_batch(
+            self.parser, batch_size, num_parallel_batches=num_clones))
+
+        dataset = dataset.prefetch(batch_size * num_clones)
+        if num_clones == 1:
+            iterator = dataset.make_one_shot_iterator()
+            return iterator.get_next()
+        else:
+            return dataset
 
 #    def show_image(self):
 #        filenames = self._get_filenames()

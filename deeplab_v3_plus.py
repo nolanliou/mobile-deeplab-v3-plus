@@ -2,14 +2,14 @@ import tensorflow as tf
 
 import layers
 from mobilenet_v2 import MobilenetV2
-from utils import scale_dimension
-
+from utils import scale_dimension 
 # Default end point for MobileNetv2.
 _MOBILENET_V2_FINAL_ENDPOINT = 'layer_18'
 
 LOGITS_SCOPE_NAME = 'logits'
 ASPP_SCOPE = "aspp"
 CONCAT_PROJECTION_SCOPE = 'concat_projection'
+DECODER_SCOPE_NAME = 'decoder'
 
 
 class DeeplabV3Plus(object):
@@ -24,7 +24,7 @@ class DeeplabV3Plus(object):
                  image_pooling_crop_size=None,
                  aspp_with_batch_norm=True,
                  aspp_with_separable_conv=True,
-                 decoder_output_stride=None):
+                 decoder_output_stride=4):
         self.num_classes = num_classes
         self.model_input_size = model_input_size
         self.atrous_rates = atrous_rates
@@ -259,10 +259,45 @@ class DeeplabV3Plus(object):
         return features, endpoints
 
     def decode(self,
-               input_tensor,
+               feature,
                endpoints,
                is_training=True):
-        pass
+        # low-level feature
+        with tf.variable_scope(DECODER_SCOPE_NAME):
+            decoder_feature_list = [feature]
+            decoder_feature_list.append(
+                self._conv2d(endpoints['layer_4/depthwise_output'],
+                             48,
+                             kernel_size=1,
+                             activation_fn=tf.nn.relu6,
+                             is_training=is_training,
+                             scope='feature_projection'))
+            decoder_height = \
+                (self.model_input_size[0] - 1) // self.decoder_output_stride + 1
+            decoder_width = \
+                (self.model_input_size[1] - 1) // self.decoder_output_stride + 1
+            for i, feature in enumerate(decoder_feature_list):
+                decoder_feature_list[i] = tf.image.resize_bilinear(
+                    feature,
+                    [decoder_height, decoder_width],
+                    align_corners=True)
+            decoder_depth = 256
+            decoder_feature = self._separable_conv(
+                tf.concat(decoder_feature_list, 3),
+                num_outputs=decoder_depth,
+                kernel_size=3,
+                activation_fn=tf.nn.relu6,
+                is_training=is_training,
+                scope="decoder_conv0")
+            decoder_feature = self._separable_conv(
+                decoder_feature,
+                num_outputs=decoder_depth,
+                kernel_size=3,
+                activation_fn=tf.nn.relu6,
+                is_training=is_training,
+                scope="decoder_conv1")
+            return decoder_feature
+
 
     def forward(self,
                 input_tensor,
@@ -279,8 +314,8 @@ class DeeplabV3Plus(object):
                                           pretrained_backbone_model_dir,
                                           is_training)
 
-        # if self.decoder_output_stride is not None:
-        #     features = self.decode(features, endpoints)
+        if self.decoder_output_stride is not None:
+            features = self.decode(features, endpoints, is_training)
         with tf.variable_scope(LOGITS_SCOPE_NAME):
             logits = self._conv2d(features,
                                   num_outputs=self.num_classes,

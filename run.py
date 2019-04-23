@@ -98,6 +98,9 @@ flags.DEFINE_multi_integer('atrous_rates', None,
 flags.DEFINE_integer('output_stride', 16,
                      'The ratio of input to output spatial resolution.')
 
+flags.DEFINE_integer('decoder_output_stride', None,
+                     'The ratio of input to decoder output spatial resolution.')
+
 # Dataset settings.
 flags.DEFINE_string('dataset_name', 'pascal_voc2012',
                     'Name of the segmentation dataset.')
@@ -153,10 +156,12 @@ def segmentation_model_fn(features,
         logits = model.forward_pass(features,
                                     is_training=is_training)
     else:
-        model = DeeplabV3Plus(num_classes=num_classes,
-                              model_input_size=params['model_input_size'],
-                              output_stride=params['output_stride'],
-                              weight_decay=params['weight_decay'])
+        model = DeeplabV3Plus(
+            num_classes=num_classes,
+            model_input_size=params['model_input_size'],
+            output_stride=params['output_stride'],
+            weight_decay=params['weight_decay'],
+            decoder_output_stride=params['decoder_output_stride'])
 
         pretrained_model_dir = params.get('pretrained_model_dir', '')
         pretrained_backbone_model_dir = ''
@@ -346,15 +351,24 @@ def train():
         is_training=False)
 
     num_train_data = train_dataset.get_num_data()
-    epochs = (FLAGS.training_number_of_steps * FLAGS.batch_size
+    training_num_of_steps = FLAGS.training_number_of_steps
+    if FLAGS.num_clones > 1:
+        training_num_of_steps = \
+            (training_num_of_steps + FLAGS.num_clones - 1) / FLAGS.num_clones
+    epochs = (training_num_of_steps * FLAGS.batch_size * FLAGS.num_clones
               + num_train_data - 1) // num_train_data
     save_checkpoints_steps = \
         (num_train_data + FLAGS.batch_size - 1) // FLAGS.batch_size
-    strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=FLAGS.num_clones)
-    run_config = tf.estimator.RunConfig(
-        save_checkpoints_steps=save_checkpoints_steps,
-        train_distribute=strategy,
-    )
+    if FLAGS.num_clones > 1:
+        strategy = tf.contrib.distribute.MirroredStrategy(
+            num_gpus=FLAGS.num_clones)
+        run_config = tf.estimator.RunConfig(
+            save_checkpoints_steps=save_checkpoints_steps,
+            train_distribute=strategy,
+        )
+    else:
+      run_config = tf.estimator.RunConfig(
+          save_checkpoints_steps=save_checkpoints_steps)
     pretrained_model_dir = FLAGS.pretrained_model_dir
     pretrained_backbone_model_dir = FLAGS.pretrained_backbone_model_dir
     if tf.train.latest_checkpoint(FLAGS.logdir):
@@ -374,13 +388,14 @@ def train():
             'ignore_label': train_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
+            'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,
             'batch_size': FLAGS.batch_size,
             'learning_policy': FLAGS.learning_policy,
             'base_learning_rate': FLAGS.base_learning_rate,
             'learning_rate_decay_step': FLAGS.learning_rate_decay_step,
             'learning_rate_decay_factor': FLAGS.learning_rate_decay_factor,
-            'training_number_of_steps': FLAGS.training_number_of_steps,
+            'training_number_of_steps': training_num_of_steps,
             'learning_power': FLAGS.learning_power,
             'slow_start_step': FLAGS.slow_start_step,
             'slow_start_learning_rate': FLAGS.slow_start_learning_rate,
@@ -392,7 +407,7 @@ def train():
         input_fn=lambda: train_dataset.make_batch(FLAGS.batch_size,
                                                   epochs,
                                                   FLAGS.num_clones),
-        max_steps=FLAGS.training_number_of_steps,
+        max_steps=training_num_of_steps,
         hooks=[time_hist])
     eval_spec = tf.estimator.EvalSpec(
         input_fn=lambda: eval_dataset.make_batch(1),
@@ -405,7 +420,8 @@ def train():
 
     avg_time_per_batch = np.mean(time_hist.times)
     print("%f images/second with %d GPUs" %
-          (FLAGS.batch_size / avg_time_per_batch, FLAGS.num_clones))
+          (FLAGS.batch_size * FLAGS.num_clones / avg_time_per_batch,
+           FLAGS.num_clones))
 
 
 def evaluate():
@@ -429,6 +445,7 @@ def evaluate():
             'ignore_label': eval_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
+            'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,
         }
     )
@@ -439,7 +456,6 @@ def evaluate():
         input_fn=lambda: eval_dataset.make_batch(1),
         steps=eval_dataset.get_num_data())
     print(eval_results)
-
 
 def export_model():
     eval_dataset = SegmentationDataset(
@@ -462,6 +478,7 @@ def export_model():
             'ignore_label': eval_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
+            'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,
         }
     )
@@ -503,4 +520,5 @@ def main(unused_argv):
 
 if __name__ == '__main__':
     flags.mark_flag_as_required('dataset_dir')
+    flags.mark_flag_as_required('dataset_name')
     tf.app.run()
