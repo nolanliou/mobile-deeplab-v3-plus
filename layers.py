@@ -16,6 +16,7 @@ def depthwise_conv(input_tensor,
                    bn_momentum=0.997,
                    bn_epsilon=1e-3,
                    activation_fn=tf.nn.relu6,
+                   quant_friendly=False,
                    is_training=True,
                    scope=None):
     in_channel = input_tensor.get_shape().as_list()[-1]
@@ -35,15 +36,16 @@ def depthwise_conv(input_tensor,
             [1, stride, stride, 1],
             padding,
             rate=[dilation_rate, dilation_rate])
-        if not use_bias and use_bn:
-            net = tf.layers.batch_normalization(
-                net,
-                momentum=bn_momentum,
-                epsilon=bn_epsilon,
-                training=is_training,
-                name='BatchNorm')
-        if activation_fn:
-            net = activation_fn(net)
+        if not quant_friendly:
+            if not use_bias and use_bn:
+                net = tf.layers.batch_normalization(
+                    net,
+                    momentum=bn_momentum,
+                    epsilon=bn_epsilon,
+                    training=is_training,
+                    name='BatchNorm')
+            if activation_fn:
+                net = activation_fn(net)
         return net
 
 

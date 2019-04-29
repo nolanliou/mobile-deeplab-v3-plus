@@ -24,7 +24,8 @@ class DeeplabV3Plus(object):
                  image_pooling_crop_size=None,
                  aspp_with_batch_norm=True,
                  aspp_with_separable_conv=True,
-                 decoder_output_stride=4):
+                 decoder_output_stride=4,
+                 quant_friendly=False):
         self.num_classes = num_classes
         self.model_input_size = model_input_size
         self.atrous_rates = atrous_rates
@@ -36,6 +37,7 @@ class DeeplabV3Plus(object):
         self.aspp_with_batch_norm = aspp_with_batch_norm
         self.aspp_with_separable_conv = aspp_with_separable_conv
         self.decoder_output_stride = decoder_output_stride
+        self.quant_friendly = quant_friendly
 
     @staticmethod
     def _conv2d(input_tensor,
@@ -99,6 +101,7 @@ class DeeplabV3Plus(object):
                         bn_momentum=0.9997,
                         bn_epsilon=1e-5,
                         activation_fn=tf.nn.relu,
+                        quant_friendly=False,
                         is_training=True,
                         scope=None):
         with tf.variable_scope(scope, default_name="separable_conv"):
@@ -113,6 +116,7 @@ class DeeplabV3Plus(object):
                                         bn_momentum=bn_momentum,
                                         bn_epsilon=bn_epsilon,
                                         activation_fn=activation_fn,
+                                        quant_friendly=quant_friendly,
                                         is_training=is_training,
                                         scope=scope + "_depthwise")
             # pointwise convolution
@@ -201,6 +205,7 @@ class DeeplabV3Plus(object):
                         padding='SAME',
                         dilation_rate=rate,
                         weight_decay=weight_decay,
+                        quant_friendly=self.quant_friendly,
                         is_training=is_training,
                         scope=scope)
                 else:
@@ -264,12 +269,15 @@ class DeeplabV3Plus(object):
                is_training=True):
         # low-level feature
         with tf.variable_scope(DECODER_SCOPE_NAME):
+            activation_fn = tf.nn.relu6
+            if self.quant_friendly:
+                activation_fn = tf.nn.relu
             decoder_feature_list = [feature]
             decoder_feature_list.append(
                 self._conv2d(endpoints['layer_4/depthwise_output'],
                              48,
                              kernel_size=1,
-                             activation_fn=tf.nn.relu6,
+                             activation_fn=activation_fn,
                              is_training=is_training,
                              scope='feature_projection'))
             decoder_height = \
@@ -286,18 +294,19 @@ class DeeplabV3Plus(object):
                 tf.concat(decoder_feature_list, 3),
                 num_outputs=decoder_depth,
                 kernel_size=3,
-                activation_fn=tf.nn.relu6,
+                activation_fn=activation_fn,
+                quant_friendly=self.quant_friendly,
                 is_training=is_training,
                 scope="decoder_conv0")
             decoder_feature = self._separable_conv(
                 decoder_feature,
                 num_outputs=decoder_depth,
                 kernel_size=3,
-                activation_fn=tf.nn.relu6,
+                activation_fn=activation_fn,
+                quant_friendly=self.quant_friendly,
                 is_training=is_training,
                 scope="decoder_conv1")
             return decoder_feature
-
 
     def forward(self,
                 input_tensor,

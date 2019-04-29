@@ -83,7 +83,8 @@ class MobilenetV2(object):
                  output_stride=None,
                  depth_multiplier=1.0,
                  min_depth=8,
-                 divisible_by=8):
+                 divisible_by=8,
+                 quant_friendly=False):
         if output_stride is not None:
             if output_stride == 0 or \
                     (output_stride > 1 and output_stride % 2):
@@ -93,6 +94,9 @@ class MobilenetV2(object):
         self.depth_multiplier = depth_multiplier
         self.min_depth = min_depth
         self.divisible_by = divisible_by
+        # remove bn and activation behind depthwise-convolution
+        # replace relu6 with relu
+        self.quant_friendly = quant_friendly
 
     @staticmethod
     def _conv2d(input_tensor,
@@ -107,6 +111,7 @@ class MobilenetV2(object):
                 use_bn=True,
                 bn_momentum=0.997,
                 activation_fn=tf.nn.relu6,
+                quant_friendly=False,
                 is_training=True,
                 scope=None):
         net = input_tensor
@@ -132,6 +137,8 @@ class MobilenetV2(object):
                     training=is_training,
                     name='BatchNorm')
             if activation_fn:
+                if quant_friendly:
+                    activation_fn = tf.nn.relu
                 net = activation_fn(net)
                 tf.summary.histogram('Activation', net)
             return net
@@ -147,6 +154,7 @@ class MobilenetV2(object):
                        depthwise_location='expand',
                        depthwise_multiplier=1,
                        weight_decay=0.00004,
+                       quant_friendly=False,
                        residual=True,
                        is_training=True,
                        scope=None):
@@ -168,6 +176,7 @@ class MobilenetV2(object):
                                           kernel_size=[1, 1],
                                           weight_decay=weight_decay,
                                           is_training=is_training,
+                                          quant_friendly=quant_friendly,
                                           scope="expand")
                 net = tf.identity(net, name="expand_output")
             # depthwise convolution
@@ -178,6 +187,7 @@ class MobilenetV2(object):
                 padding=padding,
                 dilation_rate=dilation_rate,
                 depth_multiplier=depthwise_multiplier,
+                quant_friendly=quant_friendly,
                 is_training=is_training,
                 scope="depthwise")
             net = tf.identity(net, name="depthwise_output")
@@ -272,6 +282,7 @@ class MobilenetV2(object):
                     layer_rate = 1
                     current_stride *= stride
                 # Update params.
+                params['quant_friendly'] = self.quant_friendly
                 params['stride'] = layer_stride
                 # Only insert rate to params if rate > 1.
                 if layer_rate > 1:

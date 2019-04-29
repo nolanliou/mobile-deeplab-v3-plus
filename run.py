@@ -127,6 +127,10 @@ flags.DEFINE_string('export_dir', "", 'Directory to export model.')
 
 flags.DEFINE_string('mode', "train", '[train|eval|export].')
 
+flags.DEFINE_boolean('quant_friendly', False,
+                     'Remove BN and relu behind Depthwise-Convolution,'
+                     ' and replace relu6 with relu.')
+
 
 class TimeHistory(tf.train.SessionRunHook):
     def __init__(self):
@@ -161,7 +165,8 @@ def segmentation_model_fn(features,
             model_input_size=params['model_input_size'],
             output_stride=params['output_stride'],
             weight_decay=params['weight_decay'],
-            decoder_output_stride=params['decoder_output_stride'])
+            decoder_output_stride=params['decoder_output_stride'],
+            quant_friendly=params['quant_friendly'])
 
         pretrained_model_dir = params.get('pretrained_model_dir', '')
         pretrained_backbone_model_dir = ''
@@ -400,6 +405,7 @@ def train():
             'slow_start_step': FLAGS.slow_start_step,
             'slow_start_learning_rate': FLAGS.slow_start_learning_rate,
             'momentum': FLAGS.momentum,
+            'quant_friendly': FLAGS.quant_friendly,
         }
     )
     time_hist = TimeHistory()
@@ -447,6 +453,7 @@ def evaluate():
             'output_stride': FLAGS.output_stride,
             'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,
+            'quant_friendly': FLAGS.quant_friendly,
         }
     )
 
@@ -456,6 +463,7 @@ def evaluate():
         input_fn=lambda: eval_dataset.make_batch(1),
         steps=eval_dataset.get_num_data())
     print(eval_results)
+
 
 def export_model():
     eval_dataset = SegmentationDataset(
@@ -480,6 +488,7 @@ def export_model():
             'output_stride': FLAGS.output_stride,
             'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,
+            'quant_friendly': FLAGS.quant_friendly,
         }
     )
 

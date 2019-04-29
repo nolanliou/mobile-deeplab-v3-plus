@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow.python.tools.freeze_graph import freeze_graph 
 from tensorflow.python.saved_model import tag_constants
 
+
 def freeze_graph_func(model_dir, output_node_names, output_dir):
     """Extract the sub graph defined by the output nodes and convert 
     all its variables into constant 

@@ -137,7 +137,6 @@ def preprocess_image_and_label(image,
             model_input_height,
             model_input_width)
         
-
     processed_image.set_shape([model_input_height, model_input_width, 3])
 
     if label is not None:
