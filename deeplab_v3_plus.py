@@ -192,7 +192,6 @@ class DeeplabV3Plus(object):
             weight_decay=weight_decay,
             is_training=is_training,
             scope=ASPP_SCOPE + str(0)))
-
         if self.atrous_rates:
             # Employ 3x3 convolutions with different atrous rates.
             for i, rate in enumerate(self.atrous_rates, 1):
@@ -201,7 +200,7 @@ class DeeplabV3Plus(object):
                     aspp_features = self._separable_conv(
                         features,
                         num_outputs=depth,
-                        kernel_size=[3, 3],
+                        kernel_size=3,
                         padding='SAME',
                         dilation_rate=rate,
                         weight_decay=weight_decay,
@@ -242,7 +241,8 @@ class DeeplabV3Plus(object):
             self.output_stride,
             self.depth_multiplier,
             min_depth=8 if self.depth_multiplier == 1.0 else 1,
-            divisible_by=8 if self.depth_multiplier == 1.0 else 1)
+            divisible_by=8 if self.depth_multiplier == 1.0 else 1,
+            quant_friendly=self.quant_friendly)
         features, endpoints = mobilenet_model.forward_base(
             input_tensor,
             _MOBILENET_V2_FINAL_ENDPOINT,

@@ -32,7 +32,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=''
 
 CURRENT_DIR=$(pwd)
 WORK_DIR="./people_segmentation"
@@ -53,7 +53,7 @@ download_and_uncompress() {
 }
 
 # Download the images.
-BASE_URL=""
+BASE_URL="http://cnbj1-fds.api.xiaomi.net/ml-datasets"
 FILENAME="people_segmentation.tar.gz"
 
 download_and_uncompress "${BASE_URL}" "${FILENAME}"

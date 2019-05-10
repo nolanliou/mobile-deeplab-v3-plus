@@ -30,12 +30,12 @@ TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE
 
 PS_DATASET="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/tfrecord"
 
-echo 'Evaluation'
-python run.py --dataset_dir="${PS_DATASET}"\
-  --logdir="${TRAIN_LOGDIR}" \
-  --dataset_name="people_segmentation" \
-  --model_type="${MODEL_TYPE}" \
-  --mode=eval
+#echo 'Evaluation'
+#python run.py --dataset_dir="${PS_DATASET}"\
+#  --logdir="${TRAIN_LOGDIR}" \
+#  --dataset_name="people_segmentation" \
+#  --model_type="${MODEL_TYPE}" \
+#  --mode=eval
 
 echo 'Export model'
 EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/export"
@@ -46,8 +46,15 @@ python run.py --dataset_dir="${PS_DATASET}"\
   --logdir="${TRAIN_LOGDIR}" \
   --dataset_name="people_segmentation" \
   --model_type="${MODEL_TYPE}" \
+  --decoder_output_stride=4 \
   --mode=export \
-  --export_dir="${EXPORT_DIR}"
+  --export_dir="${EXPORT_DIR}" \
+  --model_input_size=256 \
+  --model_input_size=256 \
+  --atrous_rates=6 \
+  --atrous_rates=12 \
+  --atrous_rates=18 \
+  --quant_friendly=True
 
 # freeze
 python freeze.py --model_dir="${EXPORT_DIR}" \

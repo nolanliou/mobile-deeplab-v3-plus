@@ -98,8 +98,9 @@ def main(unused_argv):
                                   variables_map)
 
     # download panda sample image
-    filename, _ = urllib.urlretrieve(
-        'https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG')  # noqa
+    #filename, _ = urllib.urlretrieve(
+    #    'https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG')  # noqa
+    filename = '/home/work/liuqi/datasets/imagenet/validation/ILSVRC2012_val_00000001.JPEG'
 
     saver = tf.train.Saver()
 

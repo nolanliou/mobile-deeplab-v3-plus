@@ -75,7 +75,7 @@ tf.app.flags.DEFINE_string(
     'Path to save converted SSTable of TensorFlow examples.')
 
 
-_NUM_SHARDS = 4
+_NUM_SHARDS = 8
 
 
 def _convert_dataset(dataset_split):
@@ -93,8 +93,8 @@ def _convert_dataset(dataset_split):
   sys.stdout.write('Processing %s, #samples: %d\n' % (dataset, num_images))
   num_per_shard = int(math.ceil(num_images / float(_NUM_SHARDS)))
 
-  image_reader = build_data.ImageReader('png', channels=3)
-  label_reader = build_data.ImageReader('png', channels=1)
+  image_reader = build_data.ImageReader(FLAGS.image_format, channels=3)
+  label_reader = build_data.ImageReader(FLAGS.label_format, channels=1)
 
   for shard_id in range(_NUM_SHARDS):
     output_filename = os.path.join(
@@ -110,7 +110,7 @@ def _convert_dataset(dataset_split):
         # Read the image.
         image_filename = os.path.join(
             FLAGS.image_folder, filenames[i] + '.' + FLAGS.image_format)
-        image_data = tf.gfile.FastGFile(image_filename, 'rb').read()
+        image_data = tf.gfile.GFile(image_filename, 'rb').read()
         height, width = image_reader.read_image_dims(image_data)
         # Read the semantic segmentation annotation.
         seg_filename = os.path.join(

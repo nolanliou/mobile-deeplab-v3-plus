@@ -62,8 +62,8 @@ _ADE20K_INFORMATION = DatasetDescriptor(
 
 _PEOPLE_SEGMENTATION_INFORMATION = DatasetDescriptor(
     subset_to_sizes={
-        'train': 5110,
-        'val': 568,
+        'train': 59067,
+        'val': 4049,
         'trainval': 5678,
     },
     num_classes=2,

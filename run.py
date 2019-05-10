@@ -113,6 +113,7 @@ flags.DEFINE_string('val_subset', 'val',
 
 flags.DEFINE_string('dataset_dir', None, 'Where the dataset reside.')
 
+# run settings.
 flags.DEFINE_boolean('debug', False, 'Debug or not')
 
 flags.DEFINE_string('model_type', "deeplab-v3-plus", 'which model to use.')
@@ -163,6 +164,7 @@ def segmentation_model_fn(features,
         model = DeeplabV3Plus(
             num_classes=num_classes,
             model_input_size=params['model_input_size'],
+            atrous_rates=params['atrous_rates'],
             output_stride=params['output_stride'],
             weight_decay=params['weight_decay'],
             decoder_output_stride=params['decoder_output_stride'],
@@ -394,6 +396,7 @@ def train():
             'model_input_size': FLAGS.model_input_size,
             'output_stride': FLAGS.output_stride,
             'decoder_output_stride': FLAGS.decoder_output_stride,
+            'atrous_rates': FLAGS.atrous_rates,
             'weight_decay': FLAGS.weight_decay,
             'batch_size': FLAGS.batch_size,
             'learning_policy': FLAGS.learning_policy,
@@ -450,6 +453,7 @@ def evaluate():
             'num_classes': eval_dataset.get_num_classes(),
             'ignore_label': eval_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
+            'atrous_rates': FLAGS.atrous_rates,
             'output_stride': FLAGS.output_stride,
             'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,
@@ -485,6 +489,7 @@ def export_model():
             'num_classes': eval_dataset.get_num_classes(),
             'ignore_label': eval_dataset.get_ignore_label(),
             'model_input_size': FLAGS.model_input_size,
+            'atrous_rates': FLAGS.atrous_rates,
             'output_stride': FLAGS.output_stride,
             'decoder_output_stride': FLAGS.decoder_output_stride,
             'weight_decay': FLAGS.weight_decay,

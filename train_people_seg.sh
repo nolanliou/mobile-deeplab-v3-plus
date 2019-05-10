@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=3
 # Update PYTHONPATH.
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
@@ -38,10 +38,18 @@ python run.py --dataset_dir="${PS_DATASET}"\
   --model_type="${MODEL_TYPE}" \
   --dataset_name="people_segmentation" \
   --train_subset="train" \
-  --base_learning_rate=0.007 \
+  --base_learning_rate=0.05 \
   --num_clones=1 \
-  --training_number_of_steps=10000 \
-  --pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
+  --training_number_of_steps=150000 \
+  --decoder_output_stride=4 \
+  --model_input_size=256 \
+  --model_input_size=256 \
+  --atrous_rates=6 \
+  --atrous_rates=12 \
+  --atrous_rates=18 \
+  --quant_friendly=True
+
+#--pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
 
 #  --pretrained_model_dir="${PRETRAINED_MODEL_DIR}" \
 #  --training_number_of_steps=10
