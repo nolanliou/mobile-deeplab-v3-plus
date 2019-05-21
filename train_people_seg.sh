@@ -49,7 +49,5 @@ python run.py --dataset_dir="${PS_DATASET}"\
   --atrous_rates=18 \
   --quant_friendly=True
 
-#--pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
-
+# --pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
 #  --pretrained_model_dir="${PRETRAINED_MODEL_DIR}" \
-#  --training_number_of_steps=10

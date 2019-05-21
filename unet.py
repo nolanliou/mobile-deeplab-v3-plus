@@ -1,4 +1,3 @@
-
 import tensorflow as tf
 
 
@@ -36,8 +35,10 @@ class UNet(object):
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay))
             net = conv2d(net)
             if not use_bias and use_bn:
-                net = tf.keras.layers.BatchNormalization(
-                    momentum=bn_momentum)(net, training=is_training)
+                net = tf.layers.batch_normalization(
+                    net,
+                    momentum=bn_momentum,
+                    training=is_training)
             if activation_fn:
                 net = activation_fn(net)
             return net

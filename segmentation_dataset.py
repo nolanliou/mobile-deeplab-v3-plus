@@ -29,15 +29,6 @@ DatasetDescriptor = collections.namedtuple(
     ]
 )
 
-_CITYSCAPES_INFORMATION = DatasetDescriptor(
-    subset_to_sizes={
-        'train': 2975,
-        'val': 500,
-    },
-    num_classes=19,
-    ignore_label=255,
-)
-
 _PASCAL_VOC_2012_INFORMATION = DatasetDescriptor(
     subset_to_sizes={
         'train': 1464,
@@ -51,15 +42,6 @@ _PASCAL_VOC_2012_INFORMATION = DatasetDescriptor(
 
 # These number (i.e., 'train'/'test') seems to have to be hard coded
 # You are required to figure it out for your training/testing example.
-_ADE20K_INFORMATION = DatasetDescriptor(
-    subset_to_sizes={
-        'train': 20210,  # num of samples in images/training
-        'val': 2000,  # num of samples in images/validation
-    },
-    num_classes=151,
-    ignore_label=0,
-)
-
 _PEOPLE_SEGMENTATION_INFORMATION = DatasetDescriptor(
     subset_to_sizes={
         'train': 59067,
@@ -72,9 +54,7 @@ _PEOPLE_SEGMENTATION_INFORMATION = DatasetDescriptor(
 
 
 _DATASETS_INFORMATION = {
-    'cityscapes': _CITYSCAPES_INFORMATION,
     'pascal_voc2012': _PASCAL_VOC_2012_INFORMATION,
-    'ade20k': _ADE20K_INFORMATION,
     'people_segmentation': _PEOPLE_SEGMENTATION_INFORMATION,
 }
 

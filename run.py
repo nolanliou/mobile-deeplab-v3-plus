@@ -116,6 +116,7 @@ flags.DEFINE_string('dataset_dir', None, 'Where the dataset reside.')
 # run settings.
 flags.DEFINE_boolean('debug', False, 'Debug or not')
 
+flags.DEFINE_string('backbone_type', "MobilenetV2", '[MobilenetV2|MobilenetV3]')
 flags.DEFINE_string('model_type', "deeplab-v3-plus", 'which model to use.')
 
 flags.DEFINE_string('pretrained_model_dir', "",
@@ -161,8 +162,14 @@ def segmentation_model_fn(features,
         logits = model.forward_pass(features,
                                     is_training=is_training)
     else:
+        pretrained_model_dir = params.get('pretrained_model_dir', '')
+        pretrained_backbone_model_dir = ''
+        if not pretrained_model_dir and is_training:
+            pretrained_backbone_model_dir = params.get(
+                'pretrained_backbone_model_dir', '')
         model = DeeplabV3Plus(
             num_classes=num_classes,
+            pretrained_backbone_model_dir=pretrained_backbone_model_dir,
             model_input_size=params['model_input_size'],
             atrous_rates=params['atrous_rates'],
             output_stride=params['output_stride'],
@@ -170,13 +177,7 @@ def segmentation_model_fn(features,
             decoder_output_stride=params['decoder_output_stride'],
             quant_friendly=params['quant_friendly'])
 
-        pretrained_model_dir = params.get('pretrained_model_dir', '')
-        pretrained_backbone_model_dir = ''
-        if not pretrained_model_dir and is_training:
-            pretrained_backbone_model_dir = params.get(
-                'pretrained_backbone_model_dir', '')
         logits = model.forward(features,
-                               pretrained_backbone_model_dir,
                                is_training=is_training)
         if is_training and pretrained_model_dir:
             print('Init from pretrained deeplab model')
@@ -388,6 +389,7 @@ def train():
         config=run_config,
         params={
             'model_type': FLAGS.model_type,
+            'backbone_type': FLAGS.backbone_type,
             'logdir': FLAGS.logdir,
             'pretrained_model_dir': pretrained_model_dir,
             'pretrained_backbone_model_dir': pretrained_backbone_model_dir,
@@ -449,6 +451,7 @@ def evaluate():
         config=run_config,
         params={
             'model_type': FLAGS.model_type,
+            'backbone_type': FLAGS.backbone_type,
             'logdir': FLAGS.logdir,
             'num_classes': eval_dataset.get_num_classes(),
             'ignore_label': eval_dataset.get_ignore_label(),
@@ -485,6 +488,7 @@ def export_model():
         config=run_config,
         params={
             'model_type': FLAGS.model_type,
+            'backbone_type': FLAGS.backbone_type,
             'logdir': FLAGS.logdir,
             'num_classes': eval_dataset.get_num_classes(),
             'ignore_label': eval_dataset.get_ignore_label(),
@@ -510,14 +514,17 @@ def export_model():
     tf.gfile.DeleteRecursively(FLAGS.export_dir)
     tf.gfile.MakeDirs(FLAGS.export_dir)
     estimator.export_savedmodel(
-        export_dir_base = FLAGS.export_dir,
-        serving_input_receiver_fn = make_serving_input_receiver_fn())
+        export_dir_base=FLAGS.export_dir,
+        serving_input_receiver_fn=make_serving_input_receiver_fn())
 
 
 def main(unused_argv):
     if FLAGS.model_type not in ['unet', 'deeplab-v3-plus']:
-        raise ValueError('Only support unet and deeplab-v3+ but got ',
+        raise ValueError('Only support unet and deeplab-v3-plus but got ',
                          FLAGS.model_type)
+    if FLAGS.backbone_type not in ['MobilenetV2', 'MobilenetV3']:
+        raise ValueError('Only support MobilenetV2 and MobilenetV3 but got ',
+                         FLAGS.backbone_type)
 
     tf.logging.set_verbosity(tf.logging.INFO)
 

@@ -2,6 +2,7 @@ import tensorflow as tf
 
 import layers
 from mobilenet_v2 import MobilenetV2
+from mobilenet_v3 import MobilenetV3
 from utils import scale_dimension 
 # Default end point for MobileNetv2.
 _MOBILENET_V2_FINAL_ENDPOINT = 'layer_18'
@@ -11,10 +12,23 @@ ASPP_SCOPE = "aspp"
 CONCAT_PROJECTION_SCOPE = 'concat_projection'
 DECODER_SCOPE_NAME = 'decoder'
 
+BACKBONE_INFO = {
+    "MobilenetV2": {
+        "final_endpoint": 'layer_18',
+        "decoder_node": 'layer_4/depthwise_output'
+    },
+    "MobilenetV3": {
+        "final_endpoint": 'layer_16',
+        'decoder_node': 'layer_5/depthwise_output'
+    }
+}
+
 
 class DeeplabV3Plus(object):
     def __init__(self,
                  num_classes,
+                 backbone='MobilenetV2',
+                 pretrained_backbone_model_dir=None,
                  model_input_size=None,
                  atrous_rates=None,
                  output_stride=None,
@@ -27,6 +41,8 @@ class DeeplabV3Plus(object):
                  decoder_output_stride=4,
                  quant_friendly=False):
         self.num_classes = num_classes
+        self.backbone = backbone
+        self.pretrained_backbone_model_dir = pretrained_backbone_model_dir
         self.model_input_size = model_input_size
         self.atrous_rates = atrous_rates
         self.output_stride = output_stride
@@ -234,27 +250,35 @@ class DeeplabV3Plus(object):
 
     def encode(self,
                input_tensor,
-               pretrained_backbone_model_dir,
                is_training=True):
         # extract features
-        mobilenet_model = MobilenetV2(
-            self.output_stride,
-            self.depth_multiplier,
-            min_depth=8 if self.depth_multiplier == 1.0 else 1,
-            divisible_by=8 if self.depth_multiplier == 1.0 else 1,
-            quant_friendly=self.quant_friendly)
+        if self.backbone == 'MobilenetV2':
+            mobilenet_model = MobilenetV2(
+                self.output_stride,
+                self.depth_multiplier,
+                min_depth=8 if self.depth_multiplier == 1.0 else 1,
+                divisible_by=8 if self.depth_multiplier == 1.0 else 1,
+                quant_friendly=self.quant_friendly)
+        else:  # MobilenetV3
+            mobilenet_model = MobilenetV3(
+                self.output_stride,
+                self.depth_multiplier,
+                min_depth=8 if self.depth_multiplier == 1.0 else 1,
+                divisible_by=8 if self.depth_multiplier == 1.0 else 1,
+                quant_friendly=self.quant_friendly)
+
         features, endpoints = mobilenet_model.forward_base(
             input_tensor,
-            _MOBILENET_V2_FINAL_ENDPOINT,
+            BACKBONE_INFO[self.backbone]['final_endpoint'],
             is_training=is_training)
         
-        if pretrained_backbone_model_dir and is_training:
-            base_architecture = 'MobilenetV2'
+        if self.pretrained_backbone_model_dir and is_training:
+            base_architecture = self.backbone
             exclude = [base_architecture + '/Logits', 'global_step']
             variables_to_restore = tf.contrib.slim.get_variables_to_restore(
                 exclude=exclude)
             tf.logging.info('init from %s model' % base_architecture)
-            tf.train.init_from_checkpoint(pretrained_backbone_model_dir,
+            tf.train.init_from_checkpoint(self.pretrained_backbone_model_dir,
                                           {v.name.split(':')[0]: v for v in
                                            variables_to_restore})
 
@@ -274,12 +298,13 @@ class DeeplabV3Plus(object):
                 activation_fn = tf.nn.relu
             decoder_feature_list = [feature]
             decoder_feature_list.append(
-                self._conv2d(endpoints['layer_4/depthwise_output'],
-                             48,
-                             kernel_size=1,
-                             activation_fn=activation_fn,
-                             is_training=is_training,
-                             scope='feature_projection'))
+                self._conv2d(
+                    endpoints[BACKBONE_INFO[self.backbone]['decoder_node']],
+                    48,
+                    kernel_size=1,
+                    activation_fn=activation_fn,
+                    is_training=is_training,
+                    scope='feature_projection'))
             decoder_height = \
                 (self.model_input_size[0] - 1) // self.decoder_output_stride + 1
             decoder_width = \
@@ -310,7 +335,6 @@ class DeeplabV3Plus(object):
 
     def forward(self,
                 input_tensor,
-                pretrained_backbone_model_dir=None,
                 is_training=True):
         input_height = (
             self.model_input_size[0]
@@ -320,7 +344,6 @@ class DeeplabV3Plus(object):
             if self.model_input_size else tf.shape(input_tensor)[2])
 
         features, endpoints = self.encode(input_tensor,
-                                          pretrained_backbone_model_dir,
                                           is_training)
 
         if self.decoder_output_stride is not None:
