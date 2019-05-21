@@ -35,7 +35,6 @@ class DeeplabV3Plus(object):
                  depth_multiplier=1.0,
                  weight_decay=0.0001,
                  add_image_level_feature=True,
-                 image_pooling_crop_size=None,
                  aspp_with_batch_norm=True,
                  aspp_with_separable_conv=True,
                  decoder_output_stride=4,
@@ -49,7 +48,6 @@ class DeeplabV3Plus(object):
         self.depth_multiplier = depth_multiplier
         self.weight_decay = weight_decay
         self.add_image_level_feature = add_image_level_feature
-        self.image_pooling_crop_size = image_pooling_crop_size
         self.aspp_with_batch_norm = aspp_with_batch_norm
         self.aspp_with_separable_conv = aspp_with_separable_conv
         self.decoder_output_stride = decoder_output_stride
@@ -159,10 +157,7 @@ class DeeplabV3Plus(object):
 
         if self.add_image_level_feature:
             if self.model_input_size is not None:
-                image_pooling_crop_size = self.image_pooling_crop_size
-                # If image_pooling_crop_size is not specified, use crop_size.
-                if image_pooling_crop_size is None:
-                    image_pooling_crop_size = self.model_input_size
+                image_pooling_crop_size = self.model_input_size
                 pool_height = scale_dimension(
                     image_pooling_crop_size[0],
                     1. / self.output_stride)
@@ -261,7 +256,7 @@ class DeeplabV3Plus(object):
                 quant_friendly=self.quant_friendly)
         else:  # MobilenetV3
             mobilenet_model = MobilenetV3(
-                self.output_stride,
+                output_stride=self.output_stride,
                 quant_friendly=self.quant_friendly)
 
         features, endpoints = mobilenet_model.forward_base(
@@ -278,7 +273,6 @@ class DeeplabV3Plus(object):
             tf.train.init_from_checkpoint(self.pretrained_backbone_model_dir,
                                           {v.name.split(':')[0]: v for v in
                                            variables_to_restore})
-
         features = self._atrous_spatial_pyramid_pooling(
             features, weight_decay=self.weight_decay, is_training=is_training)
 
