@@ -10,39 +10,10 @@ import layers
 from utils import op
 
 
-def _make_divisible(v, divisor, min_value=None):
-    if min_value is None:
-        min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    # Make sure that round down does not go down by more than 10%.
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
-
-
-def expand_input_by_factor(n, divisible_by=8):
-    return lambda num_inputs, **_: _make_divisible(num_inputs * n, divisible_by)
-
-
-def depth_multiply(output_params,
-                   multiplier,
-                   divisible_by=8,
-                   min_depth=8):
-    if 'num_outputs' not in output_params:
-        return
-    d = output_params['num_outputs']
-    output_params['num_outputs'] = _make_divisible(d * multiplier,
-                                                   divisible_by,
-                                                   min_depth)
-
-
 class MobilenetV3(object):
     def __init__(self,
                  model_type='large',
                  output_stride=None,
-                 depth_multiplier=1.0,
-                 min_depth=8,
-                 divisible_by=8,
                  quant_friendly=False):
         if output_stride is not None:
             if output_stride == 0 or \
@@ -51,9 +22,6 @@ class MobilenetV3(object):
                     'Output stride must be None, 1 or a multiple of 2.')
         self.model_type = model_type
         self.output_stride = output_stride
-        self.depth_multiplier = depth_multiplier
-        self.min_depth = min_depth
-        self.divisible_by = divisible_by
         # remove bn and activation behind depthwise-convolution
         # replace relu6 with relu
         self.quant_friendly = quant_friendly
@@ -71,6 +39,7 @@ class MobilenetV3(object):
                 use_bn=True,
                 bn_momentum=0.997,
                 activation_fn=tf.nn.relu,
+                quant_friendly=False,
                 is_training=True,
                 scope=None):
         net = input_tensor
@@ -98,7 +67,7 @@ class MobilenetV3(object):
             if activation_fn:
                 net = activation_fn(net)
                 tf.summary.histogram('Activation', net)
-            return net
+            return tf.identity(net, name="output")
 
     @staticmethod
     def _expanded_conv(input_tensor,
@@ -109,7 +78,6 @@ class MobilenetV3(object):
                        padding='SAME',
                        dilation_rate=1,
                        use_se=False,
-                       depthwise_multiplier=1,
                        weight_decay=0.00004,
                        quant_friendly=False,
                        activation_fn=tf.nn.relu,
@@ -135,7 +103,6 @@ class MobilenetV3(object):
                 stride=stride,
                 padding=padding,
                 dilation_rate=dilation_rate,
-                depth_multiplier=depthwise_multiplier,
                 use_se=use_se,
                 activation_fn=activation_fn,
                 quant_friendly=quant_friendly,
@@ -277,10 +244,6 @@ class MobilenetV3(object):
 
             for i, opdef in enumerate(model_def['spec']):
                 params = dict(opdef.params)
-                depth_multiply(params,
-                               self.depth_multiplier,
-                               self.divisible_by,
-                               self.min_depth)
 
                 params['is_training'] = is_training
                 stride = params.get('stride', 1)

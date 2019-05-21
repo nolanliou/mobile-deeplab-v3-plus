@@ -102,7 +102,8 @@ flags.DEFINE_integer('decoder_output_stride', None,
                      'The ratio of input to decoder output spatial resolution.')
 
 # Dataset settings.
-flags.DEFINE_string('dataset_name', 'pascal_voc2012',
+flags.DEFINE_string('dataset_name', None,
+                    '[pascal_voc2012|people_segmentation '
                     'Name of the segmentation dataset.')
 
 flags.DEFINE_string('train_subset', 'trainaug',
@@ -169,6 +170,7 @@ def segmentation_model_fn(features,
                 'pretrained_backbone_model_dir', '')
         model = DeeplabV3Plus(
             num_classes=num_classes,
+            backbone=params['backbone_type'],
             pretrained_backbone_model_dir=pretrained_backbone_model_dir,
             model_input_size=params['model_input_size'],
             atrous_rates=params['atrous_rates'],

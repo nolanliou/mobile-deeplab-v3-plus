@@ -141,7 +141,7 @@ class MobilenetV2(object):
                     activation_fn = tf.nn.relu
                 net = activation_fn(net)
                 tf.summary.histogram('Activation', net)
-            return net
+            return tf.identity(net, name="output")
 
     @staticmethod
     def _expanded_conv(input_tensor,

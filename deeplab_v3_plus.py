@@ -262,9 +262,6 @@ class DeeplabV3Plus(object):
         else:  # MobilenetV3
             mobilenet_model = MobilenetV3(
                 self.output_stride,
-                self.depth_multiplier,
-                min_depth=8 if self.depth_multiplier == 1.0 else 1,
-                divisible_by=8 if self.depth_multiplier == 1.0 else 1,
                 quant_friendly=self.quant_friendly)
 
         features, endpoints = mobilenet_model.forward_base(
