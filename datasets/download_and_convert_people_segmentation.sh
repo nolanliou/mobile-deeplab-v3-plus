@@ -22,7 +22,7 @@
 # The folder structure is assumed to be:
 #  + datasets
 #     - build_data.py
-#     - download_and_convert_voc2012.sh
+#     - download_and_convert_people_segmentation.sh
 #     - remove_gt_colormap.py
 #     + people_segmentation
 #       + images
@@ -39,24 +39,18 @@ WORK_DIR="./people_segmentation"
 mkdir -p "${WORK_DIR}"
 cd "${WORK_DIR}"
 
-# Helper function to download and unpack VOC 2012 dataset.
-download_and_uncompress() {
-  local BASE_URL=${1}
-  local FILENAME=${2}
+# Helper function to unpack people segmentation dataset.
+uncompress() {
+  local FILENAME=${1}
 
-  if [ ! -f "${FILENAME}" ]; then
-    echo "Downloading ${FILENAME} to ${WORK_DIR}"
-    wget -nd -c "${BASE_URL}/${FILENAME}"
-  fi
   echo "Uncompressing ${FILENAME}"
   tar -xf "${FILENAME}"
 }
 
 # Download the images.
-BASE_URL="http://cnbj1-fds.api.xiaomi.net/ml-datasets"
 FILENAME="people_segmentation.tar.gz"
 
-download_and_uncompress "${BASE_URL}" "${FILENAME}"
+uncompress "${FILENAME}"
 
 cd "${CURRENT_DIR}"
 

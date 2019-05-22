@@ -14,13 +14,10 @@ PRETRAINED_BACKBONE_MODEL_DIR='pretrained_backbone_model'
 CURRENT_DIR=$(pwd)
 WORK_DIR="${CURRENT_DIR}"
 
-# Run model_test first to make sure the PYTHONPATH is correctly set.
-# python "${WORK_DIR}"/deeplab_v3_plus_test.py -v
-
 # Go to datasets folder and download PASCAL VOC 2012 segmentation dataset.
 DATASET_DIR="datasets"
 cd "${WORK_DIR}/${DATASET_DIR}"
-#sh download_and_convert_people_segmentation.sh
+sh download_and_convert_people_segmentation.sh
 
 # Go back to original directory.
 cd "${CURRENT_DIR}"
@@ -36,14 +33,15 @@ PS_DATASET="${WORK_DIR}/${DATASET_DIR}/${PS_FOLDER}/tfrecord"
 python run.py --dataset_dir="${PS_DATASET}"\
   --logdir="${TRAIN_LOGDIR}" \
   --model_type="${MODEL_TYPE}" \
+  --backbone="MobilenetV2" \
   --dataset_name="people_segmentation" \
   --train_subset="train" \
   --base_learning_rate=0.05 \
   --num_clones=1 \
   --training_number_of_steps=150000 \
   --decoder_output_stride=4 \
-  --model_input_size=256 \
-  --model_input_size=256 \
+  --model_input_size=513 \
+  --model_input_size=513 \
   --atrous_rates=6 \
   --atrous_rates=12 \
   --atrous_rates=18 \

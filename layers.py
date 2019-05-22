@@ -116,7 +116,6 @@ def depthwise_conv(input_tensor,
         return net
 
 
-
 def resize_bilinear(images, size, output_dtype=tf.float32):
     """Returns resized images as output_type.
 

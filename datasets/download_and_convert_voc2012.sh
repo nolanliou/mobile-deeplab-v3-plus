@@ -57,7 +57,7 @@ download_and_uncompress() {
 BASE_URL="http://host.robots.ox.ac.uk/pascal/VOC/voc2012/"
 FILENAME="VOCtrainval_11-May-2012.tar"
 
-#download_and_uncompress "${BASE_URL}" "${FILENAME}"
+download_and_uncompress "${BASE_URL}" "${FILENAME}"
 
 cd "${CURRENT_DIR}"
 
@@ -65,7 +65,6 @@ cd "${CURRENT_DIR}"
 PASCAL_ROOT="${WORK_DIR}/VOCdevkit/VOC2012"
 
 # Remove the colormap in the ground truth annotations.
-# 把图片从P(彩色图)转成了L(黑白图)
 SEG_FOLDER="${PASCAL_ROOT}/SegmentationClass"
 SEMANTIC_SEG_FOLDER="${PASCAL_ROOT}/SegmentationClassRaw"
 

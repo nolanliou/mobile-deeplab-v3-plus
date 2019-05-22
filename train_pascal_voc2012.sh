@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=''
 # Update PYTHONPATH.
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
@@ -38,7 +38,7 @@ python run.py --dataset_dir="${PASCAL_DATASET}"\
   --logdir="${TRAIN_LOGDIR}" \
   --model_type="${MODEL_TYPE}" \
   --base_learning_rate=0.007 \
-  --num_clones=2 \
+  --num_clones=1 \
   --training_number_of_steps=40000 \
   --pretrained_backbone_model_dir="${PRETRAINED_BACKBONE_MODEL_DIR}"
 

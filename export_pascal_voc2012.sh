@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=''
 # Update PYTHONPATH.
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
@@ -12,17 +12,6 @@ MODEL_TYPE='deeplab-v3-plus'
 CURRENT_DIR=$(pwd)
 WORK_DIR="${CURRENT_DIR}"
 
-# Run model_test first to make sure the PYTHONPATH is correctly set.
-# python "${WORK_DIR}"/deeplab_v3_plus_test.py -v
-
-# Go to datasets folder and download PASCAL VOC 2012 segmentation dataset.
-DATASET_DIR="datasets"
-cd "${WORK_DIR}/${DATASET_DIR}"
-#sh download_and_convert_voc2012.sh
-
-# Go back to original directory.
-cd "${CURRENT_DIR}"
-
 # Set up the working directories.
 PASCAL_FOLDER="pascal_voc2012"
 EXP_FOLDER="exp"
@@ -30,12 +19,6 @@ TRAIN_LOGDIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_
 mkdir -p "${TRAIN_LOGDIR}"
 
 PASCAL_DATASET="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/tfrecord"
-
-python run.py --dataset_dir="${PASCAL_DATASET}"\
-  --dataset_name="pascal_voc2012" \
-  --logdir="${TRAIN_LOGDIR}" \
-  --model_type="${MODEL_TYPE}" \
-  --mode=eval
 
 # Export model
 EXPORT_DIR="${WORK_DIR}/${DATASET_DIR}/${PASCAL_FOLDER}/${EXP_FOLDER}/${MODEL_TYPE}/export"
