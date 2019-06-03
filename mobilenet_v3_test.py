@@ -47,7 +47,7 @@ class MobilenetV3Test(tf.test.TestCase):
 
         # for t in net.graph.get_operations():
         #     print(t.name)
-        spec = MobilenetV3.large_model_def()
+        spec = model.large_model_def()
         num_convs = len(find_ops('Conv2D'))
 
         # This is mostly a sanity test. No deep reason for these particular

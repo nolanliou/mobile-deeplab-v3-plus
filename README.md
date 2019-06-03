@@ -15,7 +15,7 @@ This project supports 2 dataset.
 2. [Supervisely People dataset](https://hackernoon.com/releasing-supervisely-person-dataset-for-teaching-machines-to-segment-humans-1f1fc1f28469).
     * People Segmentation dataset.
     * More data could refer to the [blog]()
-    * Download from [baidu pan](https://pan.baidu.com/s/19okXk4fZgzFk-Qsqm-uuOQ), code: `8pdv`
+    * Download from [Google Drive](https://drive.google.com/open?id=1Txza4tKEH0TDoTfv7HG_bPQxDMaX0pii), [baidu pan](https://pan.baidu.com/s/19okXk4fZgzFk-Qsqm-uuOQ), code: `8pdv`
 
 ## Environment
 * TensorFlow v1.12.0
@@ -70,7 +70,7 @@ method from [A Quantization-Friendly Separable Convolution for MobileNets](https
 | --- | --- | --- | --- | --- | --- | --- |
 | MobilenetV2 | YES | YES | 513x513 | NO | NO| 70.51|
 
-* Environment(base_lr=0.007, training_steps=30000, learning_policy=poly, num_gpu=1)
+* Environment: base_lr=0.007, training_steps=30000, learning_policy=poly, num_gpu=1.
 
 2. People Segmentation Dataset
 
@@ -81,7 +81,7 @@ method from [A Quantization-Friendly Separable Convolution for MobileNets](https
 | MobilenetV3 | 256x256 | YES | No | YES | YES | 150000|81.86| [model](https://drive.google.com/open?id=1ikeLDlIisBnF3ctPC0do_cABEw9EMJ7E)|
 | MobilenetV2 | 513x513 | YES | No | YES | YES | 150000|89.55| [model](https://drive.google.com/file/d/1w_CjLGuIZ-Xdiuvmjd6FOV6LhRaMX2nR/view?usp=sharing)|
 
-* Environment(base_lr=0.05, training_steps=150000, learning_policy=poly, num_gpu=1)
+* Environment: base_lr=0.05, training_steps=150000, learning_policy=poly, num_gpu=1.
 * `Augmented`: use augmented dataset.
 ## TODO
 - [ ] Add LR-ASPP module in [MobilenetV3](https://arxiv.org/pdf/1905.02244.pdf).
