@@ -25,9 +25,13 @@ class MobilenetV3(object):
         # remove bn and activation behind depthwise-convolution
         # replace relu6 with relu
         self.quant_friendly = quant_friendly
+        self.losses_list = []
 
-    @staticmethod
-    def _conv2d(input_tensor,
+    def losses(self):
+        return self.losses_list
+
+    def _conv2d(self,
+                input_tensor,
                 num_outputs,
                 kernel_size,
                 stride=1,
@@ -56,6 +60,7 @@ class MobilenetV3(object):
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                 name='conv2d')
             net = conv2d(net)
+            self.losses_list.extend(conv2d.losses)
             tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
                 # keras layers' update op is not in global update_op collections
@@ -69,8 +74,8 @@ class MobilenetV3(object):
                 tf.summary.histogram('Activation', net)
             return tf.identity(net, name="output")
 
-    @staticmethod
-    def _expanded_conv(input_tensor,
+    def _expanded_conv(self,
+                       input_tensor,
                        expansion_size,
                        num_outputs,
                        kernel_size=3,
@@ -88,13 +93,13 @@ class MobilenetV3(object):
         with tf.variable_scope(scope, default_name="expanded_conv") as s, \
                 tf.name_scope(s.original_name_scope):
             # expansion
-            net = MobilenetV3._conv2d(net,
-                                      num_outputs=expansion_size,
-                                      kernel_size=[1, 1],
-                                      weight_decay=weight_decay,
-                                      is_training=is_training,
-                                      activation_fn=activation_fn,
-                                      scope="expand")
+            net = self._conv2d(net,
+                               num_outputs=expansion_size,
+                               kernel_size=[1, 1],
+                               weight_decay=weight_decay,
+                               is_training=is_training,
+                               activation_fn=activation_fn,
+                               scope="expand")
             net = tf.identity(net, name="expand_output")
             # depthwise convolution
             net = layers.depthwise_conv(
@@ -110,107 +115,105 @@ class MobilenetV3(object):
                 scope="depthwise")
             net = tf.identity(net, name="depthwise_output")
             # projection
-            net = MobilenetV3._conv2d(net,
-                                      num_outputs=num_outputs,
-                                      kernel_size=[1, 1],
-                                      weight_decay=weight_decay,
-                                      activation_fn=None,
-                                      is_training=is_training,
-                                      scope="project")
+            net = self._conv2d(net,
+                               num_outputs=num_outputs,
+                               kernel_size=[1, 1],
+                               weight_decay=weight_decay,
+                               activation_fn=None,
+                               is_training=is_training,
+                               scope="project")
             net = tf.identity(net, name="project_output")
             output_depth = net.get_shape().as_list()[3]
             if stride == 1 and input_depth == output_depth:
                 net += input_tensor
             return tf.identity(net, name="output")
 
-    @staticmethod
-    def large_model_def():
+    def large_model_def(self):
         model_def = dict(
             spec=[
-                op(MobilenetV3._conv2d, kernel_size=3, num_outputs=16,
+                op(self._conv2d, kernel_size=3, num_outputs=16,
                    activation_fn=layers.hard_swish, stride=2),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=16, num_outputs=16, use_se=False, stride=1),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=64, num_outputs=24, use_se=False, stride=2),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=72, num_outputs=24, use_se=False, stride=1),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=72, num_outputs=40, use_se=True, stride=2),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=120, num_outputs=40, use_se=True, stride=1),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=120, num_outputs=40, use_se=True, stride=1),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=240, num_outputs=80, use_se=False, stride=2,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=200, num_outputs=80, use_se=False, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=184, num_outputs=80, use_se=False, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=184, num_outputs=80, use_se=False, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=480, num_outputs=112, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=672, num_outputs=112, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=672, num_outputs=112, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=672, num_outputs=160, use_se=True, stride=2,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=960, num_outputs=160, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._conv2d, kernel_size=1, num_outputs=960,
+                op(self._conv2d, kernel_size=1, num_outputs=960,
                    activation_fn=layers.hard_swish, stride=1),
             ]
         )
         return model_def
 
-    @staticmethod
-    def small_model_def():
+    def small_model_def(self):
         model_def = dict(
             spec=[
-                op(MobilenetV3._conv2d, kernel_size=3, num_outputs=16,
+                op(self._conv2d, kernel_size=3, num_outputs=16,
                    activation_fn=layers.hard_swish, stride=2),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=16, num_outputs=16, use_se=True, stride=2),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=72, num_outputs=24, use_se=False, stride=2),
-                op(MobilenetV3._expanded_conv, kernel_size=3,
+                op(self._expanded_conv, kernel_size=3,
                    expansion_size=88, num_outputs=24, use_se=False, stride=1),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=96, num_outputs=40, use_se=True, stride=2,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=240, num_outputs=40, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=240, num_outputs=40, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=120, num_outputs=48, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=114, num_outputs=48, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=288, num_outputs=96, use_se=True, stride=2,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=576, num_outputs=96, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._expanded_conv, kernel_size=5,
+                op(self._expanded_conv, kernel_size=5,
                    expansion_size=576, num_outputs=96, use_se=True, stride=1,
                    activation_fn=layers.hard_sigmoid),
-                op(MobilenetV3._conv2d, kernel_size=1, num_outputs=576,
+                op(self._conv2d, kernel_size=1, num_outputs=576,
                    activation_fn=layers.hard_swish, stride=1),
             ]
         )
@@ -222,9 +225,9 @@ class MobilenetV3(object):
                      is_training=True,
                      scope="MobilenetV3"):
         if self.model_type == 'small':
-            model_def = MobilenetV3.small_model_def()
+            model_def = self.small_model_def()
         else:
-            model_def = MobilenetV3.large_model_def()
+            model_def = self.large_model_def()
         endpoints = {}
         scopes = {}
         with tf.variable_scope(scope) as s, \
@@ -317,7 +320,7 @@ class MobilenetV3(object):
                     return net, end_points
                 if is_training:
                     net = tf.keras.layers.Dropout(rate=0.2)(net)
-                net = MobilenetV3._conv2d(
+                net = self._conv2d(
                     net,
                     1280,
                     [1, 1],
@@ -328,7 +331,7 @@ class MobilenetV3(object):
                     scope='Conv2d_1x1_0')
                 # 1 x 1 x num_classes
                 # Note: legacy scope name.
-                logits = MobilenetV3._conv2d(
+                logits = self._conv2d(
                     net,
                     num_classes,
                     [1, 1],

@@ -52,9 +52,13 @@ class DeeplabV3Plus(object):
         self.aspp_with_separable_conv = aspp_with_separable_conv
         self.decoder_output_stride = decoder_output_stride
         self.quant_friendly = quant_friendly
+        self.losses_list = []
 
-    @staticmethod
-    def _conv2d(input_tensor,
+    def losses(self):
+        return self.losses_list
+
+    def _conv2d(self,
+                input_tensor,
                 num_outputs,
                 kernel_size,
                 stride=1,
@@ -88,6 +92,7 @@ class DeeplabV3Plus(object):
                 kernel_regularizer=tf.keras.regularizers.l2(weight_decay),
                 name='conv2d')
             net = conv2d(net)
+            self.losses_list.extend(conv2d.losses)
             tf.summary.histogram('Weights', conv2d.weights[0])
             if not use_bias and use_bn:
                 net = tf.layers.batch_normalization(
@@ -101,8 +106,8 @@ class DeeplabV3Plus(object):
                 tf.summary.histogram('Activation', net)
             return net
 
-    @staticmethod
-    def _separable_conv(input_tensor,
+    def _separable_conv(self,
+                        input_tensor,
                         num_outputs,
                         kernel_size,
                         depth_multiplier=1,
@@ -134,18 +139,18 @@ class DeeplabV3Plus(object):
                                         is_training=is_training,
                                         scope=scope + "_depthwise")
             # pointwise convolution
-            net = DeeplabV3Plus._conv2d(net,
-                                        num_outputs=num_outputs,
-                                        kernel_size=[1, 1],
-                                        stride=stride,
-                                        padding=padding,
-                                        stddev=pw_stddev,
-                                        weight_decay=weight_decay,
-                                        bn_momentum=bn_momentum,
-                                        bn_epsilon=bn_epsilon,
-                                        activation_fn=activation_fn,
-                                        is_training=is_training,
-                                        scope=scope + "_pointwise")
+            net = self._conv2d(net,
+                               num_outputs=num_outputs,
+                               kernel_size=[1, 1],
+                               stride=stride,
+                               padding=padding,
+                               stddev=pw_stddev,
+                               weight_decay=weight_decay,
+                               bn_momentum=bn_momentum,
+                               bn_epsilon=bn_epsilon,
+                               activation_fn=activation_fn,
+                               is_training=is_training,
+                               scope=scope + "_pointwise")
             return net
 
     def _atrous_spatial_pyramid_pooling(self,
@@ -263,7 +268,10 @@ class DeeplabV3Plus(object):
             input_tensor,
             BACKBONE_INFO[self.backbone]['final_endpoint'],
             is_training=is_training)
-        
+
+        # add extra losses
+        self.losses_list.extend(mobilenet_model.losses())
+
         if self.pretrained_backbone_model_dir and is_training:
             base_architecture = self.backbone
             exclude = [base_architecture + '/Logits', 'global_step']

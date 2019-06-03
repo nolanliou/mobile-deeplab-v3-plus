@@ -232,8 +232,12 @@ def segmentation_model_fn(features,
             weights=not_ignore_mask)
 
         # Create a tensor named cross_entropy for logging purposes.
-        tf.identity(cross_entropy, name='loss')
+        tf.identity(cross_entropy, name='cross_entropy')
         tf.summary.scalar('cross_entropy', cross_entropy)
+
+        total_loss = cross_entropy + tf.add_n(model.losses())
+        tf.identity(total_loss, name='total_loss')
+        tf.summary.scalar('total_loss', total_loss)
 
     with tf.name_scope('accuracy'):
         accuracy = tf.metrics.accuracy(
@@ -283,7 +287,7 @@ def segmentation_model_fn(features,
     # the train_op
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        train_op = optimizer.minimize(cross_entropy, global_step)
+        train_op = optimizer.minimize(total_loss, global_step)
 
     def compute_mean_iou(total_cm, name='mean_iou'):
         """Compute the mean intersection-over-union via the confusion matrix."""
@@ -325,6 +329,7 @@ def segmentation_model_fn(features,
     tensors_to_log = {
         'learning_rate': learning_rate,
         'cross_entropy': cross_entropy,
+        'total_loss': total_loss,
         'train_pixel_accuracy': accuracy[1],
         'train_mean_iou': train_mean_iou,
     }
@@ -335,7 +340,7 @@ def segmentation_model_fn(features,
 
     return tf.estimator.EstimatorSpec(
         mode=mode,
-        loss=cross_entropy,
+        loss=total_loss,
         train_op=train_op,
         training_hooks=train_hooks
     )
