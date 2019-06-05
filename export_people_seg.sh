@@ -9,6 +9,7 @@ export PYTHONPATH=$PYTHONPATH:`pwd`
 
 MODEL_TYPE='deeplab-v3-plus'
 # Set up the working environment.
+DATASET_DIR="datasets"
 CURRENT_DIR=$(pwd)
 WORK_DIR="${CURRENT_DIR}"
 
